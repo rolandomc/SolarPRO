@@ -24,6 +24,7 @@ export default function Index() {
     roiMeses: number;
   } | null>(null);
 
+  // INTEGRACIÓN DE OCR REAL (API Gratuita OCR.space)
   const procesarReciboPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -32,24 +33,56 @@ export default function Index() {
       });
 
       if (!result.canceled) {
-        // Simulación de procesamiento de datos dinámicos
-        setTimeout(() => {
-          const consumoExtraido = Math.floor(Math.random() * (1500 - 300 + 1) + 300).toString();
-          const tarifaExtraida = (Math.random() * (4.5 - 1.5) + 1.5);
+        Alert.alert("Analizando Recibo", "Extrayendo datos con Inteligencia Artificial...");
+        
+        const fileUri = result.assets[0].uri;
+        const fileName = result.assets[0].name;
+        const mimeType = result.assets[0].mimeType || "application/pdf";
+
+        // Preparar el archivo para enviarlo a la API
+        const formData = new FormData();
+        formData.append("file", { uri: fileUri, name: fileName, type: mimeType } as any);
+        formData.append("language", "spa"); // Idioma español
+        formData.append("apikey", "helloworld"); // Clave API gratuita de prueba (puedes sacar la tuya en ocr.space)
+        formData.append("isOverlayRequired", "false");
+
+        const response = await fetch("https://api.ocr.space/parse/image", {
+          method: "POST",
+          body: formData,
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        const data = await response.json();
+
+        if (data.IsErroredOnProcessing || !data.ParsedResults) {
+          Alert.alert("Error OCR", "El documento no pudo ser procesado o está borroso.");
+          return;
+        }
+
+        const textoExtraido = data.ParsedResults[0]?.ParsedText || "";
+        
+        // --- LÓGICA DE EXTRACCIÓN (Expresiones Regulares) ---
+        // Busca un número de hasta 5 dígitos seguido de "kWh"
+        const matchConsumo = textoExtraido.match(/(\d{2,5})\s*(kwh|k\.w\.h)/i);
+        
+        if (matchConsumo) {
+          const consumoDetectado = matchConsumo[1];
+          setConsumoMensual(consumoDetectado);
           
-          setConsumoMensual(consumoExtraido);
-          setTarifaLuz(tarifaExtraida);
-          
-          // Una sola alerta consolidada con el consumo y el promedio diario calculado
-          const promedioDiario = (parseFloat(consumoExtraido) / 30).toFixed(2);
+          const promedioDiario = (parseFloat(consumoDetectado) / 30).toFixed(2);
           Alert.alert(
             "Extracción Exitosa", 
-            `Consumo mensual detectado: ${consumoExtraido} kWh\nPromedio diario estimado: ${promedioDiario} kWh`
+            `Consumo detectado: ${consumoDetectado} kWh\nPromedio diario: ${promedioDiario} kWh`
           );
-        }, 1500);
+        } else {
+          Alert.alert("Revisión manual", "No se encontró un consumo claro (kWh). El texto fue leído pero no hizo match.");
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "Hubo un problema al leer el documento.");
+      Alert.alert("Error de Conexión", "Revisa tu internet o intenta de nuevo.");
+      console.error(error);
     }
   };
 
@@ -148,7 +181,7 @@ const styles = StyleSheet.create({
   pdfButton: { backgroundColor: "#8B5CF6", flexDirection: "row", padding: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 20, elevation: 4 },
   pdfButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginLeft: 10 },
   card: { padding: 20, borderRadius: 12, borderWidth: 1, elevation: 2 },
-  title: { fontSize: 20, fontWeight: "bold", margin_bottom: 16 },
+  title: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   inputGroupHalf: { width: "48%" },
   label: { fontSize: 14, marginBottom: 6, fontWeight: "600" },

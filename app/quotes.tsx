@@ -44,21 +44,19 @@ export default function Quotes() {
       };
       cargarCotizacionParaEditar();
     } else {
-      // Limpieza preventiva si el parámetro no existe
       setCotizacionId(null);
       setCliente("");
       setItems([]);
     }
   }, [params.editId]);
 
-  // FUNCIÓN CLAVE: Rompe el bucle borrando parámetros de navegación y estados
-  const limpiarYSalir = () => {
+  // CORRECCIÓN: Limpia el formulario pero se queda en la pestaña
+  const limpiarFormulario = () => {
     setCotizacionId(null);
     setCliente("");
     setItems([]);
     setDesc(""); setCant(""); setPrec("");
-    router.setParams({ editId: "" }); // Elimina el id de la URL de navegación
-    router.push("/settings");
+    router.setParams({ editId: "" }); // Anula el ciclo de edición
   };
 
   const agregarItem = () => {
@@ -134,13 +132,16 @@ export default function Quotes() {
 
       if (cotizacionId) {
         historial = historial.map((c: any) => c.id === cotizacionId ? nuevaCotizacion : c);
+        // Solo avisa si es una actualización
+        Alert.alert("Éxito", "Cotización actualizada correctamente.");
       } else {
         historial.push(nuevaCotizacion);
       }
 
       await AsyncStorage.setItem("historialCotizaciones", JSON.stringify(historial));
-      Alert.alert("Éxito", "Cotización procesada correctamente.");
-      limpiarYSalir();
+      
+      // Limpia la vista para un nuevo documento y se queda en la pestaña
+      limpiarFormulario();
       
     } catch (error) {
       Alert.alert("Error", "No se pudo procesar el documento.");
@@ -161,7 +162,7 @@ export default function Quotes() {
         <View style={styles.headerRow}>
           <Text style={[styles.title, dynamicStyles.text]}>{cotizacionId ? "Editar Cotización" : "Nueva Cotización"}</Text>
           {cotizacionId && (
-            <TouchableOpacity onPress={limpiarYSalir} style={styles.cancelButton}>
+            <TouchableOpacity onPress={limpiarFormulario} style={styles.cancelButton}>
               <Text style={styles.cancelText}>Cancelar</Text>
             </TouchableOpacity>
           )}

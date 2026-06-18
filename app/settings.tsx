@@ -45,44 +45,45 @@ export default function Settings() {
     router.push({ pathname: "/quotes", params: { editId: id } });
   };
 
+  // HERRAMIENTA OCR REAL - Vuelca todo el JSON de la API en la consola
   const ejecutarLectorPruebaPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf"],
+        type: ["application/pdf", "image/*"],
         copyToCacheDirectory: true,
       });
 
       if (!result.canceled) {
+        Alert.alert("Escaneando", "Enviando archivo a la API (puede tardar unos segundos)...");
+        
+        const fileUri = result.assets[0].uri;
+        const fileName = result.assets[0].name;
+        const mimeType = result.assets[0].mimeType || "application/pdf";
+
+        const formData = new FormData();
+        formData.append("file", { uri: fileUri, name: fileName, type: mimeType } as any);
+        formData.append("language", "spa");
+        formData.append("apikey", "helloworld");
+        formData.append("isOverlayRequired", "false");
+
+        const response = await fetch("https://api.ocr.space/parse/image", {
+          method: "POST",
+          body: formData,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        const data = await response.json();
+        const textoExtraido = data.ParsedResults?.[0]?.ParsedText || "No se detectó texto en el documento.";
+
         console.log("\n==================================================");
-        console.log("--- INICIO DE TEXTO EXTRAÍDO DEL PDF (DEBUG frontend) ---");
-        console.log(`Archivo Cargado: ${result.assets[0].name}`);
-        console.log("--------------------------------------------------");
-        console.log("COMPAÑÍA DISTRIBUIDORA DE ENERGÍA ELÉCTRICA");
-        console.log("PERIODO: 01 ENE 2026 - 28 FEB 2026  |  TARIFA: Doméstica 1C");
-        console.log("NÚMERO DE MEDIDOR: MULT-991283");
-        console.log("LECTURA ANTERIOR: 34120 kWh  |  LECTURA ACTUAL: 35820 kWh");
-        console.log("CONSUMO TOTAL DEL PERIODO (BIMESTRAL): 1700 kWh");
-        console.log(">> PROCESAMIENTO SOLARCHIP INTERNO: CONSUMO MENSUAL = 850 kWh");
-        console.log("--------------------------------------------------");
-        console.log("DESGLOSE DE CARGOS:");
-        console.log("Cargo Fijo Suministro: $34.50");
-        console.log("Energía Escalón Básico: 150 kWh @ $1.15 -> $172.50");
-        console.log("Energía Escalón Intermedio: 200 kWh @ $1.45 -> $290.00");
-        console.log("Energía Escalón Excedente: 500 kWh @ $3.60 -> $1800.00");
-        console.log(">> COSTO UNITARIO COMBINADO DETECTADO: $2.66 por kWh");
-        console.log("--------------------------------------------------");
-        console.log("SUBTOTAL: $2,297.00  |  IVA: $367.52");
-        console.log("TOTAL FACTURADO: $2,664.52 M.N.");
-        console.log("--- FIN DE TEXTO EXTRAÍDO DEL PDF ---");
+        console.log("--- TEXTO BRUTO DEL PDF (HERRAMIENTA DE DESARROLLADOR) ---");
+        console.log(textoExtraido);
         console.log("==================================================\n");
 
-        Alert.alert(
-          "Consola Sincronizada",
-          "El árbol de cadenas del PDF ha sido volcado completo en la terminal para su revisión analítica."
-        );
+        Alert.alert("OCR Finalizado", "Revisa la terminal de tu computadora para analizar la estructura del texto extraído.");
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo mapear el archivo.");
+      Alert.alert("Error", "No se pudo conectar con el motor OCR.");
     }
   };
 
@@ -162,7 +163,6 @@ export default function Settings() {
 
         <View style={styles.divider} />
 
-        {/* CORRECCIÓN: Aquí se cambió el <div> por <View> */}
         <View style={styles.historyHeader}>
           <Text style={[styles.title, dynamicStyles.text, {marginBottom: 0}]}>Historial de Proyectos</Text>
           {historial.length > 0 && (
