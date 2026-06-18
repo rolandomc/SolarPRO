@@ -96,7 +96,11 @@ export default function ProCalculator() {
     input: { backgroundColor: isDark ? "#1E293B" : "#FFF", borderColor: isDark ? "#334155" : "#CBD5E1", color: isDark ? "#F8FAFC" : "#000" },
     card:  { backgroundColor: isDark ? "#1E293B" : "#FFF", borderColor: isDark ? "#334155" : "#E2E8F0" },
     modal: { backgroundColor: isDark ? "#1E293B" : "#FFF" },
+    ok:    { color: "#10B981" },
+    warn:  { color: "#EF4444" },
   };
+
+  const st = resultados?.protecciones?.strings;
 
   return (
     <SafeAreaView style={[{ flex: 1 }, ds.bg]} edges={["top", "left", "right"]}>
@@ -104,7 +108,6 @@ export default function ProCalculator() {
         <View style={styles.container}>
           <Text style={[styles.title, ds.text]}>Dimensionamiento Profesional</Text>
 
-          {/* Botones accion */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#8B5CF6" }]} onPress={escanearReciboPRO}>
               <Ionicons name="document-text" size={20} color="#FFF" />
@@ -116,27 +119,18 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* Formulario */}
           <View style={[styles.card, ds.card]}>
-            <TextInput
-              style={[styles.input, ds.input, { marginBottom: 10 }]}
-              placeholder="Cliente / Direccion"
-              placeholderTextColor={isDark ? "#64748B" : "#94A3B8"}
-              value={cliente} onChangeText={setCliente}
-            />
+            <TextInput style={[styles.input, ds.input, { marginBottom: 10 }]} placeholder="Cliente / Direccion" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={cliente} onChangeText={setCliente} />
             <View style={styles.row}>
               <TextInput style={[styles.input, ds.input, { width: "48%" }]} placeholder="Consumo mensual kWh" keyboardType="numeric" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={consumo} onChangeText={setConsumo} />
               <TextInput style={[styles.input, ds.input, { width: "48%" }]} placeholder="HSP" keyboardType="numeric" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={hsp} onChangeText={setHsp} />
             </View>
 
-            {/* Selector de panel - boton que abre modal */}
             <Text style={[styles.label, ds.text, { marginTop: 10 }]}>Panel Solar:</Text>
             <TouchableOpacity style={[styles.panelSelector, ds.card]} onPress={() => setModalVisible(true)}>
               <View style={{ flex: 1 }}>
-                <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>
-                  {panelSeleccionado.marca} {panelSeleccionado.modelo}
-                </Text>
-                <Text style={[ds.sub, { fontSize: 13 }]}>{panelSeleccionado.pmax} W por panel</Text>
+                <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>{panelSeleccionado.marca} {panelSeleccionado.modelo}</Text>
+                <Text style={[ds.sub, { fontSize: 13 }]}>{panelSeleccionado.pmax} W  •  Voc {panelSeleccionado.voc}V  •  Isc {panelSeleccionado.isc}A</Text>
               </View>
               <Ionicons name="chevron-down" size={22} color={isDark ? "#94A3B8" : "#64748B"} />
             </TouchableOpacity>
@@ -146,25 +140,25 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* Resultados */}
           {resultados && (
             <View style={[styles.card, ds.card, { marginTop: 20 }]}>
               <Text style={[styles.title, { color: "#10B981" }]}>Memoria de Calculo</Text>
 
+              {/* Chips resumen */}
               <Text style={[styles.sectionLabel, ds.text]}>Arreglo Fotovoltaico</Text>
               <View style={styles.chipsRow}>
                 <View style={styles.chip}>
-                  <Ionicons name="sunny" size={22} color="#F59E0B" />
+                  <Ionicons name="sunny" size={20} color="#F59E0B" />
                   <Text style={styles.chipNum}>{resultados.numPaneles}</Text>
                   <Text style={styles.chipLabel}>Paneles</Text>
                 </View>
                 <View style={styles.chip}>
-                  <Ionicons name="flash" size={22} color="#0EA5E9" />
+                  <Ionicons name="flash" size={20} color="#0EA5E9" />
                   <Text style={styles.chipNum}>{resultados.potenciaKW.toFixed(2)}</Text>
                   <Text style={styles.chipLabel}>kWp</Text>
                 </View>
                 <View style={styles.chip}>
-                  <Ionicons name="battery-charging" size={22} color="#10B981" />
+                  <Ionicons name="battery-charging" size={20} color="#10B981" />
                   <Text style={styles.chipNum}>{resultados.panelObj.pmax}W</Text>
                   <Text style={styles.chipLabel}>c/panel</Text>
                 </View>
@@ -175,11 +169,75 @@ export default function ProCalculator() {
 
               <View style={styles.divider} />
 
+              {/* Arreglo de strings MPPT */}
+              <Text style={[styles.sectionLabel, ds.text]}>Arreglo de Strings / MPPT</Text>
+
+              {/* Diagrama visual */}
+              <View style={styles.stringDiagram}>
+                {/* Columna paneles por string */}
+                <View style={styles.stringBox}>
+                  <Text style={styles.stringBigNum}>{st.panelesPorString}</Text>
+                  <Text style={styles.stringBoxLabel}>Paneles{"\n"}por String{"\n"}(serie)</Text>
+                </View>
+                <Text style={[styles.stringOp, ds.sub]}>×</Text>
+                {/* Columna strings por MPPT */}
+                <View style={styles.stringBox}>
+                  <Text style={styles.stringBigNum}>{st.stringsEnParalelo}</Text>
+                  <Text style={styles.stringBoxLabel}>Strings{"\n"}por MPPT{"\n"}(paralelo)</Text>
+                </View>
+                <Text style={[styles.stringOp, ds.sub]}>×</Text>
+                {/* MPPT usados */}
+                <View style={styles.stringBox}>
+                  <Text style={styles.stringBigNum}>{st.mpptUsados}</Text>
+                  <Text style={styles.stringBoxLabel}>MPPT{"\n"}usados{"\n"}de {resultados.inversor.num_mppt}</Text>
+                </View>
+              </View>
+
+              {/* Tabla de voltajes y corrientes */}
+              <View style={[styles.stringTable, { borderColor: isDark ? "#334155" : "#E2E8F0" }]}>
+                <View style={styles.stringTableRow}>
+                  <Text style={[styles.stringTableKey, ds.sub]}>Voc del string</Text>
+                  <Text style={[styles.stringTableVal, ds.text]}>{st.vocString} V</Text>
+                  <Text style={{ fontSize: 12, color: st.vocString <= resultados.inversor.max_dc_volts ? "#10B981" : "#EF4444" }}>
+                    {st.vocString <= resultados.inversor.max_dc_volts ? "✓ OK" : "✗ Excede"}
+                  </Text>
+                </View>
+                <View style={styles.stringTableRow}>
+                  <Text style={[styles.stringTableKey, ds.sub]}>Vmp del string</Text>
+                  <Text style={[styles.stringTableVal, ds.text]}>{st.vmpString} V</Text>
+                  <Text style={[{ fontSize: 12 }, ds.sub]}>punto de trabajo</Text>
+                </View>
+                <View style={styles.stringTableRow}>
+                  <Text style={[styles.stringTableKey, ds.sub]}>Isc total x MPPT</Text>
+                  <Text style={[styles.stringTableVal, ds.text]}>{st.corrienteParalelo} A</Text>
+                  <Text style={{ fontSize: 12, color: st.corrienteParalelo <= resultados.inversor.imax_por_mppt ? "#10B981" : "#EF4444" }}>
+                    {st.corrienteParalelo <= resultados.inversor.imax_por_mppt ? "✓ OK" : "✗ Excede"}
+                  </Text>
+                </View>
+                <View style={styles.stringTableRow}>
+                  <Text style={[styles.stringTableKey, ds.sub]}>Strings totales</Text>
+                  <Text style={[styles.stringTableVal, ds.text]}>{st.stringsTotal}</Text>
+                  <Text style={[{ fontSize: 12 }, ds.sub]}>{st.stringsEnParalelo} x {st.mpptUsados} MPPT</Text>
+                </View>
+              </View>
+
+              {/* Alertas de strings */}
+              {st.alertas.length > 0 && (
+                <View style={styles.alertBox}>
+                  {st.alertas.map((a: string, i: number) => (
+                    <Text key={i} style={styles.alertText}>{a}</Text>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.divider} />
+
+              {/* Inversor */}
               <Text style={[styles.sectionLabel, ds.text]}>Inversor Sugerido</Text>
               <View style={[styles.inversorCard, { borderColor: resultados.sobredimensionado ? "#EF4444" : "#10B981" }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>{resultados.inversor.marca} {resultados.inversor.modelo}</Text>
-                  <Text style={ds.sub}>CC max: {(resultados.inversor.max_dc_input / 1000).toFixed(1)} kW</Text>
+                  <Text style={ds.sub}>CC max: {(resultados.inversor.max_dc_input / 1000).toFixed(1)} kW  •  {resultados.inversor.num_mppt} MPPT</Text>
                   <Text style={ds.sub}>Precio: ${resultados.inversor.precio_mxn.toLocaleString()} MXN</Text>
                   {resultados.sobredimensionado
                     ? <Text style={{ color: "#EF4444", fontWeight: "bold", marginTop: 4 }}>Excede capacidad</Text>
@@ -190,16 +248,15 @@ export default function ProCalculator() {
 
               <View style={styles.divider} />
 
-              <Text style={[styles.sectionLabel, ds.text]}>Protecciones CC</Text>
-              <Text style={ds.sub}>  Voltaje Voc String: {resultados.protecciones.voltajeSistema} VDC</Text>
-              <Text style={ds.sub}>  Fusibles: {resultados.protecciones.fusibleCC}A</Text>
-              <Text style={ds.sub}>  Calibre Solar: {resultados.protecciones.cableCC}</Text>
-              <Text style={[styles.sectionLabel, ds.text, { marginTop: 12 }]}>Protecciones CA</Text>
-              <Text style={ds.sub}>  Termomag: {resultados.protecciones.pastillaCA}A</Text>
-              <Text style={ds.sub}>  Calibre THW-LS: {resultados.protecciones.cableCA}</Text>
+              {/* Protecciones */}
+              <Text style={[styles.sectionLabel, ds.text]}>Protecciones CC (por string)</Text>
+              <Text style={ds.sub}>  Fusible: {resultados.protecciones.fusibleCC}A  •  Calibre: {resultados.protecciones.cableCC}</Text>
+              <Text style={[styles.sectionLabel, ds.text, { marginTop: 10 }]}>Protecciones CA</Text>
+              <Text style={ds.sub}>  Termomag: {resultados.protecciones.pastillaCA}A  •  Calibre: {resultados.protecciones.cableCA}</Text>
 
               <View style={styles.divider} />
 
+              {/* Costos */}
               <Text style={[styles.sectionLabel, ds.text]}>Estimado de Costos</Text>
               <View style={styles.costoRow}>
                 <Text style={ds.sub}>Paneles ({resultados.numPaneles} x ${resultados.panelObj.precio_mxn.toLocaleString()})</Text>
@@ -253,9 +310,7 @@ export default function ProCalculator() {
                     onPress={() => { setPanelSelId(item.id); setModalVisible(false); }}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>
-                        {item.marca}
-                      </Text>
+                      <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>{item.marca}</Text>
                       <Text style={ds.sub}>{item.modelo}</Text>
                     </View>
                     <View style={styles.panelWatts}>
@@ -275,31 +330,43 @@ export default function ProCalculator() {
 }
 
 const styles = StyleSheet.create({
-  container:      { padding: 20, paddingBottom: 50 },
-  title:          { fontSize: 20, fontWeight: "bold", marginBottom: 15 },
-  sectionLabel:   { fontSize: 15, fontWeight: "bold", marginBottom: 8 },
-  actionRow:      { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  actionBtn:      { width: "48%", flexDirection: "row", padding: 12, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  btnText:        { color: "#FFF", fontWeight: "bold", marginLeft: 8 },
-  card:           { padding: 20, borderRadius: 12, borderWidth: 1 },
-  row:            { flexDirection: "row", justifyContent: "space-between" },
-  input:          { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-  label:          { fontSize: 14, fontWeight: "bold", marginBottom: 5 },
-  calcBtn:        { backgroundColor: "#10B981", padding: 16, borderRadius: 8, alignItems: "center", marginTop: 10, flexDirection: "row", justifyContent: "center" },
-  panelSelector:  { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1.5, marginBottom: 15 },
-  chipsRow:       { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  chip:           { flex: 1, alignItems: "center", backgroundColor: "rgba(14,165,233,0.08)", borderRadius: 10, padding: 12, marginHorizontal: 4 },
-  chipNum:        { fontSize: 20, fontWeight: "bold", color: "#0EA5E9", marginTop: 4 },
-  chipLabel:      { fontSize: 12, color: "#64748B", marginTop: 2 },
-  inversorCard:   { flexDirection: "row", alignItems: "center", borderWidth: 2, borderRadius: 10, padding: 14, marginBottom: 8 },
-  divider:        { height: 1, backgroundColor: "#CBD5E1", marginVertical: 14 },
-  costoRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  container:       { padding: 20, paddingBottom: 50 },
+  title:           { fontSize: 20, fontWeight: "bold", marginBottom: 15 },
+  sectionLabel:    { fontSize: 15, fontWeight: "bold", marginBottom: 8 },
+  actionRow:       { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+  actionBtn:       { width: "48%", flexDirection: "row", padding: 12, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+  btnText:         { color: "#FFF", fontWeight: "bold", marginLeft: 8 },
+  card:            { padding: 20, borderRadius: 12, borderWidth: 1 },
+  row:             { flexDirection: "row", justifyContent: "space-between" },
+  input:           { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  label:           { fontSize: 14, fontWeight: "bold", marginBottom: 5 },
+  calcBtn:         { backgroundColor: "#10B981", padding: 16, borderRadius: 8, alignItems: "center", marginTop: 10, flexDirection: "row", justifyContent: "center" },
+  panelSelector:   { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1.5, marginBottom: 15 },
+  chipsRow:        { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  chip:            { flex: 1, alignItems: "center", backgroundColor: "rgba(14,165,233,0.08)", borderRadius: 10, padding: 10, marginHorizontal: 3 },
+  chipNum:         { fontSize: 18, fontWeight: "bold", color: "#0EA5E9", marginTop: 3 },
+  chipLabel:       { fontSize: 11, color: "#64748B", marginTop: 2 },
+  inversorCard:    { flexDirection: "row", alignItems: "center", borderWidth: 2, borderRadius: 10, padding: 14, marginBottom: 8 },
+  divider:         { height: 1, backgroundColor: "#CBD5E1", marginVertical: 14 },
+  costoRow:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  // Strings diagram
+  stringDiagram:   { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  stringBox:       { alignItems: "center", backgroundColor: "rgba(14,165,233,0.08)", borderRadius: 10, padding: 12, minWidth: 80 },
+  stringBigNum:    { fontSize: 28, fontWeight: "bold", color: "#0EA5E9" },
+  stringBoxLabel:  { fontSize: 11, color: "#64748B", textAlign: "center", marginTop: 4, lineHeight: 16 },
+  stringOp:        { fontSize: 24, fontWeight: "bold", marginHorizontal: 8 },
+  stringTable:     { borderWidth: 1, borderRadius: 8, overflow: "hidden", marginBottom: 10 },
+  stringTableRow:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
+  stringTableKey:  { flex: 2, fontSize: 13 },
+  stringTableVal:  { flex: 1, fontSize: 14, fontWeight: "bold", textAlign: "center" },
+  alertBox:        { backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 8, padding: 10, marginBottom: 8 },
+  alertText:       { color: "#EF4444", fontWeight: "bold", fontSize: 13, marginBottom: 3 },
   // Modal
-  modalOverlay:   { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContainer: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: "80%" },
-  modalHeader:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  panelItem:      { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1.5, marginBottom: 10 },
-  panelWatts:     { alignItems: "center", marginLeft: 8 },
-  panelWattsNum:  { fontSize: 22, fontWeight: "bold", color: "#0EA5E9" },
-  panelWattsLabel:{ fontSize: 11, color: "#64748B" },
+  modalOverlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContainer:  { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: "80%" },
+  modalHeader:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  panelItem:       { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1.5, marginBottom: 10 },
+  panelWatts:      { alignItems: "center", marginLeft: 8 },
+  panelWattsNum:   { fontSize: 22, fontWeight: "bold", color: "#0EA5E9" },
+  panelWattsLabel: { fontSize: 11, color: "#64748B" },
 });
