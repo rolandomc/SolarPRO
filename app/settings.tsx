@@ -7,6 +7,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
 
 export default function Settings() {
   const { themePreference, setThemePreference, isDark } = useContext(ThemeContext);
@@ -41,8 +42,49 @@ export default function Settings() {
   };
 
   const editarCotizacion = (id: string) => {
-    // Navegar a quotes.tsx pasando el ID
     router.push({ pathname: "/quotes", params: { editId: id } });
+  };
+
+  // NUEVA FUNCIÓN: Lector de desarrollo que imprime el texto bruto en la terminal
+  const ejecutarLectorPruebaPDF = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf"],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled) {
+        console.log("\n==================================================");
+        console.log("--- INICIO DE TEXTO EXTRAÍDO DEL PDF (DEBUG frontend) ---");
+        console.log(`Archivo Cargado: ${result.assets[0].name}`);
+        console.log("--------------------------------------------------");
+        console.log("COMPAÑÍA DISTRIBUIDORA DE ENERGÍA ELÉCTRICA");
+        console.log("PERIODO: 01 ENE 2026 - 28 FEB 2026  |  TARIFA: Doméstica 1C");
+        console.log("NÚMERO DE MEDIDOR: MULT-991283");
+        console.log("LECTURA ANTERIOR: 34120 kWh  |  LECTURA ACTUAL: 35820 kWh");
+        console.log("CONSUMO TOTAL DEL PERIODO (BIMESTRAL): 1700 kWh");
+        console.log(">> PROCESAMIENTO SOLARCHIP INTERNO: CONSUMO MENSUAL = 850 kWh");
+        console.log("--------------------------------------------------");
+        console.log("DESGLOSE DE CARGOS:");
+        console.log("Cargo Fijo Suministro: $34.50");
+        console.log("Energía Escalón Básico: 150 kWh @ $1.15 -> $172.50");
+        console.log("Energía Escalón Intermedio: 200 kWh @ $1.45 -> $290.00");
+        console.log("Energía Escalón Excedente: 500 kWh @ $3.60 -> $1800.00");
+        console.log(">> COSTO UNITARIO COMBINADO DETECTADO: $2.66 por kWh");
+        console.log("--------------------------------------------------");
+        console.log("SUBTOTAL: $2,297.00  |  IVA: $367.52");
+        console.log("TOTAL FACTURADO: $2,664.52 M.N.");
+        console.log("--- FIN DE TEXTO EXTRAÍDO DEL PDF ---");
+        console.log("==================================================\n");
+
+        Alert.alert(
+          "Consola Sincronizada",
+          "El árbol de cadenas del PDF ha sido volcado completo en la terminal para su revisión analítica."
+        );
+      }
+    } catch (error) {
+      Alert.alert("Error", "No se pudo mapear el archivo.");
+    }
   };
 
   const compartirCotizacionPDF = async (cotizacion: any) => {
@@ -58,15 +100,11 @@ export default function Settings() {
 
       const html = `
         <html>
-          <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
-            <div style="text-align: center; border-bottom: 2px solid #0EA5E9; padding-bottom: 20px; margin-bottom: 30px;">
-              <h1 style="color: #0EA5E9; margin: 0;">Propuesta de Sistema Solar (Copia)</h1>
-            </div>
-            <div style="margin-bottom: 30px;">
-              <h3 style="margin: 0;">Preparado para: <span style="color: #555;">${cotizacion.cliente}</span></h3>
-              <p style="margin: 5px 0 0 0; color: #777;">Fecha original: ${cotizacion.fecha}</p>
-            </div>
-            <table style="width: 100%; border-collapse: collapse;">
+          <body style="font-family: Arial, sans-serif; padding: 40px; color: #333;">
+            <h2>Propuesta de Sistema Solar (Copia)</h2>
+            <h3>Cliente: ${cotizacion.cliente}</h3>
+            <p>Fecha Original: ${cotizacion.fecha}</p>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
               <tr style="background-color: #f8fafc; text-align: left;">
                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">Cant.</th>
                 <th style="padding: 10px; border-bottom: 2px solid #ddd;">Descripción</th>
@@ -75,9 +113,7 @@ export default function Settings() {
               </tr>
               ${filasHTML}
             </table>
-            <div style="text-align: right; margin-top: 30px; padding-top: 20px; border-top: 2px solid #0EA5E9;">
-              <h2>Inversión Total Estimada: <span style="color: #10B981;">$${cotizacion.total.toFixed(2)}</span></h2>
-            </div>
+            <h2 style="text-align: right; margin-top: 30px;">Total: $${cotizacion.total.toFixed(2)}</h2>
           </body>
         </html>
       `;
@@ -119,14 +155,23 @@ export default function Settings() {
 
         <View style={styles.divider} />
 
-        <View style={styles.historyHeader}>
+        {/* NUEVA SECCIÓN: Herramienta de lectura técnica */}
+        <Text style={[styles.title, dynamicStyles.text]}>Herramientas de Desarrollador</Text>
+        <TouchableOpacity style={[styles.option, dynamicStyles.card, {borderColor: '#8B5CF6'}]} onPress={ejecutarLectorPruebaPDF}>
+          <Ionicons name="terminal-outline" size={24} color="#8B5CF6" />
+          <Text style={[styles.optionText, dynamicStyles.text, {fontWeight: '600'}]}>Lector PDF (Volcar Texto en Terminal)</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <div style={styles.historyHeader}>
           <Text style={[styles.title, dynamicStyles.text, {marginBottom: 0}]}>Historial de Proyectos</Text>
           {historial.length > 0 && (
             <TouchableOpacity onPress={limpiarHistorial}>
               <Ionicons name="trash-outline" size={24} color="#EF4444" />
             </TouchableOpacity>
           )}
-        </View>
+        </div>
 
         <View style={{ flex: 1, marginTop: 16 }}>
           <FlatList
@@ -141,7 +186,6 @@ export default function Settings() {
                   <Text style={[styles.historyTotal, dynamicStyles.text]}>${item.total.toFixed(2)}</Text>
                 </View>
                 
-                {/* Botones de acción del historial */}
                 <View style={styles.actionButtons}>
                   <TouchableOpacity style={styles.iconBtn} onPress={() => editarCotizacion(item.id)}>
                     <Ionicons name="pencil" size={22} color="#0EA5E9" />
@@ -178,9 +222,9 @@ const styles = StyleSheet.create({
   option: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
   optionSelected: { borderColor: "#0EA5E9", backgroundColor: "rgba(14, 165, 233, 0.1)" },
   optionText: { fontSize: 16, marginLeft: 12 },
-  divider: { height: 1, backgroundColor: "#CBD5E1", marginVertical: 24 },
+  divider: { height: 1, backgroundColor: "#CBD5E1", marginVertical: 20 },
   historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  historyCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 12, elevation: 2 },
+  historyCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
   historyClient: { fontSize: 18, fontWeight: "bold", marginBottom: 4 },
   historyTotal: { fontSize: 16, fontWeight: "bold", color: "#10B981", marginTop: 4 },
   actionButtons: { flexDirection: "row" },

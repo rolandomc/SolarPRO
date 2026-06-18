@@ -7,15 +7,13 @@ import { ThemeContext } from "./_layout";
 export default function Index() {
   const { isDark } = useContext(ThemeContext);
 
-  // Estados visibles para el usuario
   const [consumoMensual, setConsumoMensual] = useState("");
   const [potenciaPanel, setPotenciaPanel] = useState("");
   const [porcentajeAhorro, setPorcentajeAhorro] = useState("100");
   
-  // Estados internos (ocultos en la UI, pero editables vía código o "OCR")
-  const [tarifaLuz, setTarifaLuz] = useState(2.50); // Valor por defecto
-  const HSP_DEFAULT = 5.5; // Constante interna
-  const COSTO_INSTALACION_W = 20; // Constante interna
+  const [tarifaLuz, setTarifaLuz] = useState(2.50); 
+  const HSP_DEFAULT = 5.5; 
+  const COSTO_INSTALACION_W = 20; 
   
   const [resultados, setResultados] = useState<{
     paneles: number;
@@ -26,7 +24,6 @@ export default function Index() {
     roiMeses: number;
   } | null>(null);
 
-  // Simulación de OCR Dinámico
   const procesarReciboPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -35,9 +32,7 @@ export default function Index() {
       });
 
       if (!result.canceled) {
-        Alert.alert("Procesando Recibo", "Analizando el documento con OCR...");
-        
-        // Simulación: Generar valores aleatorios realistas para simular extracción
+        // Simulación de procesamiento de datos dinámicos
         setTimeout(() => {
           const consumoExtraido = Math.floor(Math.random() * (1500 - 300 + 1) + 300).toString();
           const tarifaExtraida = (Math.random() * (4.5 - 1.5) + 1.5);
@@ -45,8 +40,13 @@ export default function Index() {
           setConsumoMensual(consumoExtraido);
           setTarifaLuz(tarifaExtraida);
           
-          Alert.alert("Extracción Exitosa", `Consumo detectado: ${consumoExtraido} kWh\nTarifa detectada: $${tarifaExtraida.toFixed(2)} / kWh`);
-        }, 2000);
+          // Una sola alerta consolidada con el consumo y el promedio diario calculado
+          const promedioDiario = (parseFloat(consumoExtraido) / 30).toFixed(2);
+          Alert.alert(
+            "Extracción Exitosa", 
+            `Consumo mensual detectado: ${consumoExtraido} kWh\nPromedio diario estimado: ${promedioDiario} kWh`
+          );
+        }, 1500);
       }
     } catch (error) {
       Alert.alert("Error", "Hubo un problema al leer el documento.");
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   pdfButton: { backgroundColor: "#8B5CF6", flexDirection: "row", padding: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 20, elevation: 4 },
   pdfButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginLeft: 10 },
   card: { padding: 20, borderRadius: 12, borderWidth: 1, elevation: 2 },
-  title: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },
+  title: { fontSize: 20, fontWeight: "bold", margin_bottom: 16 },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   inputGroupHalf: { width: "48%" },
   label: { fontSize: 14, marginBottom: 6, fontWeight: "600" },
