@@ -3,11 +3,18 @@
 //   NOM-001-SEDE-2012  Art. 690 — Sistemas Fotovoltaicos
 //   NMX-J-680-ANCE-2014 — Instalaciones FV interconectadas
 //
-// LOGICA DE DISTRIBUCION (corregida):
-//   El punto de partida es dividir los paneles EQUITATIVAMENTE entre los MPPT
-//   disponibles. Luego se verifica que esa configuracion cumple los limites
-//   de voltaje (Voc invierno) y corriente (Isc x 1.56) segun NOM.
-//   Si hay exceso, se ajusta reduciendo paneles en serie o aumentando strings.
+// REGLA CLAVE (error corregido):
+//   La corriente de diseño NOM (Isc × 1.25 × 1.25 = × 1.5625) es SOLO para
+//   dimensionar fusibles y conductores (NOM-001 art. 690.8 + art. 310).
+//
+//   Para verificar si el MPPT del inversor soporta la carga se usa la
+//   corriente REAL de entrada = Isc_panel × strings_en_paralelo.
+//   El inversor especifica su imax_por_mppt como corriente fisica maxima.
+//
+//   Comparaciones correctas:
+//     MPPT:      corrienteEntradaMPPT  (Isc × strings)       ≤ imax_por_mppt
+//     Fusible:   iDisenoCC            (Isc × 1.5625 string)  → elige calibre
+//     Voltaje:   vocStringInvierno    (Voc × factor temp)    ≤ max_dc_volts
 import * as Location from 'expo-location';
 
 export const obtenerHSPDesdeNasa = async () => {
@@ -28,76 +35,61 @@ export const obtenerHSPDesdeNasa = async () => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// CONSTANTES DE DISEÑO  (NOM-001-SEDE-2012 / NMX-J-680-ANCE-2014)
+// CONSTANTES
 // ════════════════════════════════════════════════════════════════════════════
 
-// Temperatura minima de diseno Mexico (invierno critico)
-// -10°C conservador para el pais completo (Sierra, Altiplano)
-const T_MIN_DISENO = -10;   // °C
-const T_STC        = 25;    // °C — Condiciones Estandar de Test
+const T_MIN_DISENO  = -10;     // °C  temperatura minima de diseño Mexico
+const T_STC         = 25;     // °C  condiciones estandar de test
+const COEF_TEMP_VOC = -0.0029; // /°C  coeficiente Voc tipico monocristalino
+const MARGEN_VOC    = 0.95;   // 5% de colchon sobre Vmax inversor
 
-// Coeficiente tipico Voc paneles monocristalinos: -0.29%/°C
-// En invierno (T baja) el Voc SUBE → riesgo de dañar el inversor
-const COEF_TEMP_VOC = -0.0029;   // /°C
-
-// Coeficiente tipico Isc: +0.04%/°C (sube ligeramente en calor)
-// Para el calculo de corriente usamos STC como peor caso practico
-const COEF_TEMP_ISC = 0.0004;    // /°C
-
-// Factores de seguridad NOM-001-SEDE-2012 art. 690.8
-//   Isc_diseno = Isc × 1.25 (irradiancia aumentada)
-//   I_conductor = Isc_diseno × 1.25 (uso continuo, art. 310)
-//   I_total_NOM = Isc × 1.25 × 1.25 = × 1.5625
+// Factores NOM-001-SEDE-2012 art. 690.8 + art. 310
+// USO EXCLUSIVO para dimensionar fusibles y conductores CC:
+//   Paso 1: Isc_circuito = Isc × 1.25  (irradiancia sobre 1000 W/m²)
+//   Paso 2: I_conductor  = Isc_circuito × 1.25  (uso continuo >3h)
+//   Total:  Isc_diseño  = Isc × 1.5625
 const FS_IRRADIANCIA = 1.25;
 const FS_CONTINUO    = 1.25;
-const FS_TOTAL_CC    = FS_IRRADIANCIA * FS_CONTINUO;  // 1.5625
-
-// Margen de seguridad voltaje: 5% bajo el maximo del inversor
-const MARGEN_VOC = 0.95;
+const FS_TOTAL_CC    = FS_IRRADIANCIA * FS_CONTINUO; // 1.5625  solo para fusible/cable
 
 // ════════════════════════════════════════════════════════════════════════════
-// CORRECCIONES DE TEMPERATURA (NOM-001 Art. 690.7)
+// CORRECCION DE TEMPERATURA (NOM-001 Art. 690.7)
 // ════════════════════════════════════════════════════════════════════════════
-// Voc_invierno = Voc_stc × [1 + (-0.0029) × (-10 - 25)]
-//             = Voc_stc × [1 + (-0.0029) × (-35)]
-//             = Voc_stc × 1.1015   → sube ~10.15%
+// En invierno el Voc SUBE porque el coeficiente es negativo y T_min < T_stc:
+//   Voc_inv = Voc_stc × [1 + (-0.0029) × (-10 - 25)] = Voc_stc × 1.1015
+// Esto es el peor caso para el voltaje → puede dañar el inversor.
 const vocInvierno = (voc: number): number =>
   voc * (1 + COEF_TEMP_VOC * (T_MIN_DISENO - T_STC));
-
-const iscInvierno = (isc: number): number =>
-  isc * (1 + COEF_TEMP_ISC * (T_MIN_DISENO - T_STC));
 
 // ════════════════════════════════════════════════════════════════════════════
 // INTERFACE
 // ════════════════════════════════════════════════════════════════════════════
 export interface ResultadoStrings {
-  panelesPorString:      number;
-  stringsEnParalelo:     number;   // strings en paralelo POR MPPT
-  stringsTotalSistema:   number;
-  mpptUsados:            number;
-  vocStringStc:          number;   // Voc string a 25°C
-  vocStringInvierno:     number;   // Voc string corregido -10°C (critico)
-  vmpString:             number;   // Vmp string (punto de trabajo MPPT)
-  iscString:             number;   // Isc de UN string
-  corrienteEntradaMPPT:  number;   // Isc × stringsEnParalelo (entrada al MPPT)
-  corrienteDisenoCC:     number;   // corrienteEntradaMPPT × 1.5625 (NOM)
-  distribucionMPPT:      { mppt: number; strings: number; paneles: number }[];
-  vocDentroLimite:       boolean;
-  iscDentroLimite:       boolean;
-  mpptSuficientes:       boolean;
-  alertas:               string[];
-  errores:               string[];
+  panelesPorString:     number;
+  stringsEnParalelo:    number;  // strings en paralelo POR MPPT
+  stringsTotalSistema:  number;
+  mpptUsados:           number;
+  // Voltajes
+  vocStringStc:         number;  // Voc del string a 25°C (referencia)
+  vocStringInvierno:    number;  // Voc del string a -10°C (← comparar con Vmax inversor)
+  vmpString:            number;  // Vmp del string = punto de trabajo MPPT
+  // Corrientes — tres valores distintos con propósitos distintos:
+  iscString:            number;  // Isc de 1 solo string (= Isc del panel)
+  corrienteEntradaMPPT: number;  // Isc × strings_paralelo  (← comparar con imax_por_mppt)
+  iDisenoFusibleStr:    number;  // Isc_1string × 1.5625     (← dimensionar fusible por string)
+  iDisenoFusibleMPPT:   number;  // corrienteEntradaMPPT × 1.5625 (← fusible entrada combiner)
+  // Distribución
+  distribucionMPPT:     { mppt: number; strings: number; paneles: number }[];
+  // Validaciones
+  vocDentroLimite:      boolean; // vocStringInvierno ≤ max_dc_volts
+  iscDentroLimite:      boolean; // corrienteEntradaMPPT ≤ imax_por_mppt
+  mpptSuficientes:      boolean;
+  alertas:              string[];
+  errores:              string[];
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CALCULO PRINCIPAL DE STRINGS
-// Logica:
-//   PASO 1 — Dividir paneles entre MPPT disponibles (punto de partida ideal)
-//   PASO 2 — Calcular paneles en serie por string = ceil(paneles/mppt)
-//   PASO 3 — Verificar Voc_invierno × panelesSerie ≤ Vmax_inversor × 0.95
-//   PASO 4 — Si excede, reducir panelesSerie (aumenta strings, reparte mas)
-//   PASO 5 — Verificar Isc × strings_paralelo × 1.56 ≤ imax_por_mppt
-//   PASO 6 — Si excede corriente, agregar mas MPPT o reducir strings/MPPT
+// CALCULO PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
 export const calcularArregloStrings = (
   panel: any,
@@ -107,60 +99,47 @@ export const calcularArregloStrings = (
   const alertas: string[] = [];
   const errores: string[] = [];
 
-  const vocPanelInv  = vocInvierno(panel.voc);     // Voc corregido invierno
-  const vMaxEfectivo = inversor.max_dc_volts * MARGEN_VOC;  // Vmax con margen 5%
+  const vocPanelInv  = vocInvierno(panel.voc);
+  const vMaxEfectivo = inversor.max_dc_volts * MARGEN_VOC;
 
-  // ── PASO 1: Limite fisico de paneles en serie (voltaje) ──────────────────
-  // Nunca puede exceder este numero sin importar la configuracion
+  // ── 1. Límite de voltaje: max paneles en serie ───────────────────────────
+  // Usar Voc corregido por invierno (NOM-001 Art. 690.7)
+  // vocStringInvierno = panelesSerie × vocPanelInv ≤ max_dc_volts
   const maxPanelesSerie = Math.floor(vMaxEfectivo / vocPanelInv);
-  // Minimo: Vmp_string debe superar el umbral MPPT (~80V tipico)
   const minPanelesSerie = Math.max(2, Math.ceil(80 / panel.vmp));
 
-  // ── PASO 2: Punto de partida — distribuir entre MPPT disponibles ─────────
-  // Ejemplo: 12 paneles, 2 MPPT → 6 paneles por MPPT → 1 string de 6 en serie
-  // Ejemplo: 10 paneles, 2 MPPT → 5 paneles por MPPT → 1 string de 5 en serie
-  // Ejemplo: 16 paneles, 2 MPPT → 8 paneles por MPPT → 1 string de 8 en serie
-  const mpptDisponibles   = inversor.num_mppt;
-  const panelesPorMPPT_ideal = Math.ceil(numPaneles / mpptDisponibles);
-
-  // Paneles en serie iniciales = paneles por MPPT (1 string por MPPT de inicio)
-  // Luego se ajusta si hay demasiados en paralelo o si excede voltaje
-  let panelesPorString = panelesPorMPPT_ideal;
-
-  // ── PASO 3: Ajustar paneles en serie para no exceder voltaje maximo ───────
-  if (panelesPorString > maxPanelesSerie) {
-    panelesPorString = maxPanelesSerie;
-  }
-  if (panelesPorString < minPanelesSerie) {
-    panelesPorString = minPanelesSerie;
-  }
-
-  // ── PASO 4: Strings totales con los paneles en serie elegidos ────────────
-  const stringsTotalSistema = Math.ceil(numPaneles / panelesPorString);
-
-  // ── PASO 5: Limite de corriente por MPPT ─────────────────────────────────
-  // Cuantos strings en paralelo caben en un MPPT sin exceder su corriente max?
-  // Condicion: strings_paralelo × Isc × 1.5625 ≤ imax_por_mppt
+  // ── 2. Límite de corriente: max strings en paralelo por MPPT ────────────
+  // El inversor limita la corriente FISICA real que puede recibir por MPPT.
+  // corrienteEntradaMPPT = Isc_panel × stringsEnParalelo ≤ imax_por_mppt
+  // (NO se aplica el factor 1.5625 aquí — ese es solo para fusible/cable)
   const maxStringsPorMPPT = Math.max(1,
-    Math.floor(inversor.imax_por_mppt / (panel.isc * FS_TOTAL_CC))
+    Math.floor(inversor.imax_por_mppt / panel.isc)
   );
 
-  // ── PASO 6: MPPT necesarios y distribucion ───────────────────────────────
-  // Cuantos MPPT se necesitan para alojar todos los strings sin exceder corriente?
-  const mpptNecesarios = Math.ceil(stringsTotalSistema / maxStringsPorMPPT);
+  // ── 3. Punto de partida: distribuir paneles entre MPPT disponibles ───────
+  // 12 paneles, 2 MPPT → 6 paneles/MPPT → 1 string de 6 por MPPT
+  const mpptDisponibles = inversor.num_mppt;
+  let panelesPorString  = Math.ceil(numPaneles / mpptDisponibles);
 
-  // Usamos TODOS los MPPT disponibles para distribuir mejor la carga,
-  // siempre que haya al menos 1 string por MPPT
+  // Ajustar por límites
+  if (panelesPorString > maxPanelesSerie) panelesPorString = maxPanelesSerie;
+  if (panelesPorString < minPanelesSerie) panelesPorString = minPanelesSerie;
+
+  // ── 4. Strings totales y distribución ──────────────────────────────────
+  const stringsTotalSistema = Math.ceil(numPaneles / panelesPorString);
+
+  // MPPT necesarios para no exceder corriente real por MPPT
+  const mpptNecesarios  = Math.ceil(stringsTotalSistema / maxStringsPorMPPT);
+
+  // Usar todos los MPPT disponibles para distribuir la carga equitativamente
   const mpptUsados = Math.min(
     Math.max(mpptNecesarios, Math.min(mpptDisponibles, stringsTotalSistema)),
     mpptDisponibles
   );
 
-  // Strings por MPPT (distribucion lo mas uniforme posible)
   const stringsEnParalelo = Math.ceil(stringsTotalSistema / mpptUsados);
 
-  // ── PASO 7: Distribucion real por cada MPPT ───────────────────────────────
-  // El ultimo MPPT puede tener menos strings si el total no es multiplo
+  // ── 5. Distribución detallada por MPPT ─────────────────────────────────
   let stringsRestantes = stringsTotalSistema;
   const distribucionMPPT: { mppt: number; strings: number; paneles: number }[] = [];
   for (let i = 0; i < mpptUsados; i++) {
@@ -174,60 +153,73 @@ export const calcularArregloStrings = (
     if (stringsRestantes <= 0) break;
   }
 
-  // ── PASO 8: Calculos electricos del string y del bus DC ───────────────────
-  const vocStringStc     = parseFloat((panelesPorString * panel.voc).toFixed(1));
-  const vocStringInvierno= parseFloat((panelesPorString * vocPanelInv).toFixed(1));
-  const vmpString        = parseFloat((panelesPorString * panel.vmp).toFixed(1));
-  const iscString        = parseFloat(panel.isc.toFixed(2));
+  // ── 6. Calculos eléctricos ──────────────────────────────────────────────
 
-  // Corriente total en la entrada del MPPT = strings_paralelo × Isc_panel
+  // Voltajes
+  const vocStringStc      = parseFloat((panelesPorString * panel.voc).toFixed(1));
+  const vocStringInvierno = parseFloat((panelesPorString * vocPanelInv).toFixed(1));
+  const vmpString         = parseFloat((panelesPorString * panel.vmp).toFixed(1));
+
+  // Corrientes
+  const iscString = parseFloat(panel.isc.toFixed(2));
+
+  // Corriente REAL que entra al MPPT = Isc_panel × strings_en_paralelo
+  // Es la que se compara contra imax_por_mppt del inversor
   const corrienteEntradaMPPT = parseFloat((stringsEnParalelo * panel.isc).toFixed(2));
-  // Corriente de diseño NOM (lo que dimensiona el fusible y el conductor)
-  const corrienteDisenoCC = parseFloat((stringsEnParalelo * panel.isc * FS_TOTAL_CC).toFixed(2));
 
-  // ── PASO 9: Validaciones de norma ─────────────────────────────────────────
+  // Corriente de diseño NOM para fusible de 1 string (Isc_1string × 1.5625)
+  // Solo se usa para elegir el calibre del fusible y el conductor por string
+  const iDisenoFusibleStr  = parseFloat((panel.isc * FS_TOTAL_CC).toFixed(2));
 
-  // Voltaje (NOM-001 Art. 690.7)
+  // Corriente de diseño NOM para fusible de entrada al combiner/MPPT
+  // (cuando hay strings en paralelo, el fusible del combiner ve la suma)
+  const iDisenoFusibleMPPT = parseFloat((corrienteEntradaMPPT * FS_TOTAL_CC).toFixed(2));
+
+  // ── 7. Validaciones ──────────────────────────────────────────────────────
+
+  // A) Voltaje: comparar Voc_invierno del string vs Vmax del inversor
+  //    (NOM-001 Art. 690.7)
   const vocDentroLimite = vocStringInvierno <= inversor.max_dc_volts;
   if (!vocDentroLimite) {
     errores.push(
-      `❌ NOM-001 690.7: Voc invierno del string ${vocStringInvierno}V excede Vmax inversor ${inversor.max_dc_volts}V`
+      `❌ NOM-001 690.7: Voc invierno ${vocStringInvierno}V excede Vmax inversor ${inversor.max_dc_volts}V`
     );
   } else if (vocStringInvierno > inversor.max_dc_volts * 0.90) {
     alertas.push(
-      `⚠️ Voc invierno ${vocStringInvierno}V = ${Math.round(vocStringInvierno/inversor.max_dc_volts*100)}% del limite (margen estrecho)`
+      `⚠️ Voc invierno ${vocStringInvierno}V = ${Math.round(vocStringInvierno / inversor.max_dc_volts * 100)}% del límite`
     );
   }
 
-  // Corriente (NOM-001 Art. 690.8)
-  const iscDentroLimite = corrienteDisenoCC <= inversor.imax_por_mppt;
+  // B) Corriente: comparar corriente REAL de entrada vs imax_por_mppt
+  //    El inversor indica la corriente fisica maxima que acepta en su MPPT.
+  //    NO se aplica 1.5625 aquí.
+  const iscDentroLimite = corrienteEntradaMPPT <= inversor.imax_por_mppt;
   if (!iscDentroLimite) {
     errores.push(
-      `❌ NOM-001 690.8: Corriente diseño ${corrienteDisenoCC}A (Isc×1.56) excede MPPT max ${inversor.imax_por_mppt}A`
+      `❌ Corriente real MPPT: ${corrienteEntradaMPPT}A (${stringsEnParalelo} strings × ${panel.isc}A) excede límite del inversor ${inversor.imax_por_mppt}A`
     );
   }
 
-  // MPPT suficientes
+  // C) MPPT suficientes
   const mpptSuficientes = mpptNecesarios <= mpptDisponibles;
   if (!mpptSuficientes) {
     errores.push(
-      `❌ Se necesitan ${mpptNecesarios} MPPT pero el inversor solo tiene ${mpptDisponibles}`
+      `❌ Se necesitan ${mpptNecesarios} MPPT pero el inversor tiene ${mpptDisponibles}`
     );
   }
 
-  // Ratio DC/AC sobredimensionado (NMX-J-680: max recomendado 1.30)
+  // D) Ratio DC/AC (NMX-J-680: recomendado máx 1.30)
   const ratioDC_AC = (numPaneles * panel.pmax) / inversor.pmax_ac;
   if (ratioDC_AC > 1.30) {
     alertas.push(
-      `⚠️ Ratio DC/AC = ${ratioDC_AC.toFixed(2)} — maximo recomendado 1.30 (NMX-J-680)`
+      `⚠️ Ratio DC/AC = ${ratioDC_AC.toFixed(2)} — recomendado máx 1.30 (NMX-J-680)`
     );
   }
 
-  // Informativo: si paneles no son divisibles exacto entre strings
-  const panelesSobrantes = numPaneles - (stringsTotalSistema * panelesPorString - (panelesPorString - (numPaneles % panelesPorString || panelesPorString)));
+  // E) Informativo: paneles sobrantes en el último string
   if (numPaneles % panelesPorString !== 0) {
     alertas.push(
-      `ℹ️ ${numPaneles} paneles no divide exacto en strings de ${panelesPorString} — el ultimo string tiene ${numPaneles % panelesPorString} paneles`
+      `ℹ️ El último string tiene ${numPaneles % panelesPorString} paneles (los demás tienen ${panelesPorString})`
     );
   }
 
@@ -241,7 +233,8 @@ export const calcularArregloStrings = (
     vmpString,
     iscString,
     corrienteEntradaMPPT,
-    corrienteDisenoCC,
+    iDisenoFusibleStr,
+    iDisenoFusibleMPPT,
     distribucionMPPT,
     vocDentroLimite,
     iscDentroLimite,
@@ -274,20 +267,22 @@ export const sugerirInversorCompatible = (
 export const calcularProtecciones = (panel: any, inversor: any, numPaneles: number) => {
   const strings = calcularArregloStrings(panel, inversor, numPaneles);
 
-  // ── CC: por string ────────────────────────────────────────────────────────
-  // Corriente de diseño = Isc × 1.25 × 1.25 = × 1.5625  (NOM-001 art. 690.8)
-  const iDisenoCC = panel.isc * FS_TOTAL_CC;
   const fusiblesComerciales = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80];
-  const fusibleCC = fusiblesComerciales.find(f => f >= iDisenoCC) ?? Math.ceil(iDisenoCC / 5) * 5;
 
-  // Conductor CC solar (THWN-2 / cable FV 90°C, tabla NOM)
+  // ── CC: fusible POR STRING ─────────────────────────────────────────────
+  // Isc_1string × 1.5625 (NOM-001 art. 690.8)
+  // Este fusible protege el cable de cada string individual
+  const iDisenoFusStr = strings.iDisenoFusibleStr;
+  const fusibleCCStr  = fusiblesComerciales.find(f => f >= iDisenoFusStr) ?? Math.ceil(iDisenoFusStr / 5) * 5;
+
+  // Cable del string: conductor solar 90°C (THWN-2 / USE-2)
   let cableCC = '12 AWG (Solar FV)';
-  if (iDisenoCC > 15) cableCC = '10 AWG (Solar FV)';
-  if (iDisenoCC > 25) cableCC = '8 AWG (Solar FV)';
-  if (iDisenoCC > 35) cableCC = '6 AWG (Solar FV)';
+  if (iDisenoFusStr > 15) cableCC = '10 AWG (Solar FV)';
+  if (iDisenoFusStr > 25) cableCC = '8 AWG (Solar FV)';
+  if (iDisenoFusStr > 35) cableCC = '6 AWG (Solar FV)';
 
-  // ── CA ────────────────────────────────────────────────────────────────────
-  // Corriente de diseño CA = Iac_nominal × 1.25  (uso continuo, NOM art. 310)
+  // ── CA: interruptor termomagnético ─────────────────────────────────────────
+  // Iac_nominal × 1.25 (uso continuo, NOM art. 310)
   const iDisenoCA = inversor.i_max_ac * FS_IRRADIANCIA;
   const pastillaCA = fusiblesComerciales.find(f => f >= iDisenoCA) ?? Math.ceil(iDisenoCA / 5) * 5;
 
@@ -302,12 +297,14 @@ export const calcularProtecciones = (panel: any, inversor: any, numPaneles: numb
 
   return {
     strings,
-    fusibleCC,
+    // CC
+    fusibleCC:   fusibleCCStr,
     cableCC,
-    iDisenoCC: parseFloat(iDisenoCC.toFixed(2)),
+    iDisenoCC:   parseFloat(iDisenoFusStr.toFixed(2)),   // Isc_1str × 1.5625
+    // CA
     pastillaCA,
     cableCA,
-    iDisenoCA: parseFloat(iDisenoCA.toFixed(2)),
+    iDisenoCA:   parseFloat(iDisenoCA.toFixed(2)),       // Iac × 1.25
     voltajeSistema: strings.vocStringInvierno.toFixed(1),
   };
 };
