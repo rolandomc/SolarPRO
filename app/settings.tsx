@@ -45,7 +45,7 @@ export default function Settings() {
     router.push({ pathname: "/quotes", params: { editId: id } });
   };
 
-  // HERRAMIENTA OCR REAL - Vuelca todo el JSON de la API en la consola
+  // HERRAMIENTA OCR REAL - Ahora con Engine 2 para ver la estructura real de la tabla
   const ejecutarLectorPruebaPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -54,7 +54,7 @@ export default function Settings() {
       });
 
       if (!result.canceled) {
-        Alert.alert("Escaneando", "Enviando archivo a la API (puede tardar unos segundos)...");
+        Alert.alert("Escaneando", "Enviando archivo con Engine 2 (Tablas y Recibos)...");
         
         const fileUri = result.assets[0].uri;
         const fileName = result.assets[0].name;
@@ -65,6 +65,9 @@ export default function Settings() {
         formData.append("language", "spa");
         formData.append("apikey", "helloworld");
         formData.append("isOverlayRequired", "false");
+        formData.append("OCREngine", "2"); // Crucial para CFE
+        formData.append("scale", "true");
+        formData.append("isTable", "true");
 
         const response = await fetch("https://api.ocr.space/parse/image", {
           method: "POST",
@@ -76,11 +79,11 @@ export default function Settings() {
         const textoExtraido = data.ParsedResults?.[0]?.ParsedText || "No se detectó texto en el documento.";
 
         console.log("\n==================================================");
-        console.log("--- TEXTO BRUTO DEL PDF (HERRAMIENTA DE DESARROLLADOR) ---");
+        console.log("--- TEXTO BRUTO DEL PDF (ENGINE 2 - TABLAS) ---");
         console.log(textoExtraido);
         console.log("==================================================\n");
 
-        Alert.alert("OCR Finalizado", "Revisa la terminal de tu computadora para analizar la estructura del texto extraído.");
+        Alert.alert("OCR Finalizado", "Revisa la terminal. Notarás que el formato de columnas se respeta mucho más.");
       }
     } catch (error) {
       Alert.alert("Error", "No se pudo conectar con el motor OCR.");

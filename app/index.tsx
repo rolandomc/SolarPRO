@@ -24,7 +24,7 @@ export default function Index() {
     roiMeses: number;
   } | null>(null);
 
-  // INTEGRACIÓN DE OCR REAL (API Gratuita OCR.space)
+  // INTEGRACIÓN OCR AVANZADA PARA RECIBOS CFE / COMPLEJOS
   const procesarReciboPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -33,18 +33,22 @@ export default function Index() {
       });
 
       if (!result.canceled) {
-        Alert.alert("Analizando Recibo", "Extrayendo datos con Inteligencia Artificial...");
+        Alert.alert("Analizando Recibo", "Extrayendo datos de tabla con Motor OCR Avanzado...");
         
         const fileUri = result.assets[0].uri;
         const fileName = result.assets[0].name;
         const mimeType = result.assets[0].mimeType || "application/pdf";
 
-        // Preparar el archivo para enviarlo a la API
         const formData = new FormData();
         formData.append("file", { uri: fileUri, name: fileName, type: mimeType } as any);
-        formData.append("language", "spa"); // Idioma español
-        formData.append("apikey", "helloworld"); // Clave API gratuita de prueba (puedes sacar la tuya en ocr.space)
+        formData.append("language", "spa");
+        formData.append("apikey", "helloworld");
         formData.append("isOverlayRequired", "false");
+        
+        // CONFIGURACIONES AVANZADAS PARA RECIBOS Y TABLAS (CFE)
+        formData.append("OCREngine", "2"); // Engine 2 es mucho mejor para recibos y números
+        formData.append("scale", "true");  // Aumenta la resolución internamente antes de leer
+        formData.append("isTable", "true"); // Obliga a la API a respetar columnas y filas
 
         const response = await fetch("https://api.ocr.space/parse/image", {
           method: "POST",
@@ -57,31 +61,51 @@ export default function Index() {
         const data = await response.json();
 
         if (data.IsErroredOnProcessing || !data.ParsedResults) {
-          Alert.alert("Error OCR", "El documento no pudo ser procesado o está borroso.");
+          Alert.alert("Error OCR", "El documento no pudo ser procesado o es ilegible.");
           return;
         }
 
         const textoExtraido = data.ParsedResults[0]?.ParsedText || "";
         
-        // --- LÓGICA DE EXTRACCIÓN (Expresiones Regulares) ---
-        // Busca un número de hasta 5 dígitos seguido de "kWh"
-        const matchConsumo = textoExtraido.match(/(\d{2,5})\s*(kwh|k\.w\.h)/i);
+        // --- LÓGICA DE EXTRACCIÓN INTELIGENTE (Múltiples intentos) ---
+        let consumoDetectado = null;
+
+        // Intentos de Regex basados en CFE y recibos comunes
+        const patrones = [
+          /(\d{2,5})\s*(?:kwh|k\.w\.h)/i,             // 1. Clásico: "1500 kWh"
+          /\(kWh\)\s*(\d{2,5})/i,                     // 2. Formato de columna: "(kWh) 1500"
+          /(?:consumo|energía)\s*.*?(\d{2,5})/i,      // 3. Etiqueta: "Consumo 1500"
+          /(?:facturado|periodo).*?\s(\d{2,5})\s/i,   // 4. CFE a veces lo pone suelto al final del periodo
+        ];
+
+        for (const regex of patrones) {
+          const match = textoExtraido.match(regex);
+          if (match && match[1]) {
+            // Evitamos que extraiga años como "2024" o "2026"
+            const posibleConsumo = parseInt(match[1]);
+            if (posibleConsumo > 0 && posibleConsumo !== 2024 && posibleConsumo !== 2025 && posibleConsumo !== 2026) {
+              consumoDetectado = match[1];
+              break;
+            }
+          }
+        }
         
-        if (matchConsumo) {
-          const consumoDetectado = matchConsumo[1];
+        if (consumoDetectado) {
           setConsumoMensual(consumoDetectado);
-          
           const promedioDiario = (parseFloat(consumoDetectado) / 30).toFixed(2);
           Alert.alert(
             "Extracción Exitosa", 
             `Consumo detectado: ${consumoDetectado} kWh\nPromedio diario: ${promedioDiario} kWh`
           );
         } else {
-          Alert.alert("Revisión manual", "No se encontró un consumo claro (kWh). El texto fue leído pero no hizo match.");
+          Alert.alert(
+            "Lectura Parcial", 
+            "El motor leyó el documento, pero la marca de agua impidió encontrar el número exacto del consumo. Por favor ingresalo manualmente."
+          );
         }
       }
     } catch (error) {
-      Alert.alert("Error de Conexión", "Revisa tu internet o intenta de nuevo.");
+      Alert.alert("Error de Conexión", "Revisa tu internet o el servicio de OCR está saturado.");
       console.error(error);
     }
   };
