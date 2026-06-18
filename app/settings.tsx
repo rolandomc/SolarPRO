@@ -1,13 +1,14 @@
-import React, { useContext, useState, useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, Alert } from "react-native";
+import React, { useContext, useState, useCallback, useEffect } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, Alert, TextInput, Image, ScrollView } from "react-native";
 import { ThemeContext } from "./_layout";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import { procesarDocumentoOCR } from "../utils/ocrService";
+import { generarCotizacionProfesional } from "../utils/pdfGenerator";
 
 export default function Settings() {
   const { themePreference, setThemePreference, isDark } = useContext(ThemeContext);
@@ -15,212 +16,167 @@ export default function Settings() {
   const [historial, setHistorial] = useState<any[]>([]);
   const [isPro, setIsPro] = useState(false); 
 
+  // Estados del Perfil de Empresa
+  const [nombreEmpresa, setNombreEmpresa] = useState("");
+  const [telefonoEmpresa, setTelefonoEmpresa] = useState("");
+  const [emailEmpresa, setEmailEmpresa] = useState("");
+  const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
+
   useFocusEffect(
     useCallback(() => {
-      cargarHistorial();
+      cargarDatos();
     }, [])
   );
 
-  const cargarHistorial = async () => {
+  const cargarDatos = async () => {
     try {
-      const data = await AsyncStorage.getItem("historialCotizaciones");
-      if (data) setHistorial(JSON.parse(data).reverse());
-    } catch (error) {
-      console.log("Error al cargar el historial");
+      const dataHistorial = await AsyncStorage.getItem("historialCotizaciones");
+      if (dataHistorial) setHistorial(JSON.parse(dataHistorial).reverse());
+
+      const dataPerfil = await AsyncStorage.getItem("perfilEmpresa");
+      if (dataPerfil) {
+        const perfil = JSON.parse(dataPerfil);
+        setNombreEmpresa(perfil.nombre || "");
+        setTelefonoEmpresa(perfil.telefono || "");
+        setEmailEmpresa(perfil.email || "");
+        setLogoEmpresa(perfil.logoBase64 || null);
+      }
+    } catch (error) {}
+  };
+
+  const seleccionarLogo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+      base64: true, // Importante para inyectarlo en el PDF
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      setLogoEmpresa(`data:image/jpeg;base64,${result.assets[0].base64}`);
     }
+  };
+
+  const guardarPerfil = async () => {
+    const perfil = { nombre: nombreEmpresa, telefono: telefonoEmpresa, email: emailEmpresa, logoBase64: logoEmpresa };
+    await AsyncStorage.setItem("perfilEmpresa", JSON.stringify(perfil));
+    Alert.alert("Guardado", "Los datos de tu empresa aparecerán en tus PDFs.");
   };
 
   const limpiarHistorial = async () => {
     Alert.alert("Confirmación", "¿Borrar todo el historial?", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: async () => {
-          await AsyncStorage.removeItem("historialCotizaciones");
-          setHistorial([]);
-        }
-      }
+      { text: "Borrar", style: "destructive", onPress: async () => { await AsyncStorage.removeItem("historialCotizaciones"); setHistorial([]); } }
     ]);
   };
 
-  const editarCotizacion = (id: string) => {
-    router.push({ pathname: "/quotes", params: { editId: id } });
-  };
-
-  // HERRAMIENTA OCR REAL - Ahora con Engine 2 para ver la estructura real de la tabla
   const ejecutarLectorPruebaPDF = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "image/*"],
-        copyToCacheDirectory: true,
-      });
-
+      const result = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true });
       if (!result.canceled) {
-        Alert.alert("Escaneando", "Enviando archivo con Engine 2 (Tablas y Recibos)...");
-        
-        const fileUri = result.assets[0].uri;
-        const fileName = result.assets[0].name;
-        const mimeType = result.assets[0].mimeType || "application/pdf";
-
-        const formData = new FormData();
-        formData.append("file", { uri: fileUri, name: fileName, type: mimeType } as any);
-        formData.append("language", "spa");
-        formData.append("apikey", "helloworld");
-        formData.append("isOverlayRequired", "false");
-        formData.append("OCREngine", "2"); // Crucial para CFE
-        formData.append("scale", "true");
-        formData.append("isTable", "true");
-
-        const response = await fetch("https://api.ocr.space/parse/image", {
-          method: "POST",
-          body: formData,
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-
-        const data = await response.json();
-        const textoExtraido = data.ParsedResults?.[0]?.ParsedText || "No se detectó texto en el documento.";
-
-        console.log("\n==================================================");
-        console.log("--- TEXTO BRUTO DEL PDF (ENGINE 2 - TABLAS) ---");
-        console.log(textoExtraido);
-        console.log("==================================================\n");
-
-        Alert.alert("OCR Finalizado", "Revisa la terminal. Notarás que el formato de columnas se respeta mucho más.");
+        Alert.alert("Analizando", "Verificando consola...");
+        const file = result.assets[0];
+        const res = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || "application/pdf");
+        console.log("\n--- TEXTO BRUTO (DEBUG) ---\n", res.textoBruto, "\n---------------------------");
+        Alert.alert("Finalizado", "Texto impreso en la terminal.");
       }
-    } catch (error) {
-      Alert.alert("Error", "No se pudo conectar con el motor OCR.");
-    }
+    } catch (error) { Alert.alert("Error", "Fallo al leer."); }
   };
 
   const compartirCotizacionPDF = async (cotizacion: any) => {
     try {
-      const filasHTML = (cotizacion.items || []).map((item: any) => `
-        <tr>
-          <td style="padding: 10px; border-bottom: 1px solid #ddd;">${item.cantidad}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #ddd;">${item.descripcion}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #ddd;">$${item.precio}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #ddd;">$${(parseFloat(item.cantidad) * parseFloat(item.precio)).toFixed(2)}</td>
-        </tr>
-      `).join('');
-
-      const html = `
-        <html>
-          <body style="font-family: Arial, sans-serif; padding: 40px; color: #333;">
-            <h2>Propuesta de Sistema Solar (Copia)</h2>
-            <h3>Cliente: ${cotizacion.cliente}</h3>
-            <p>Fecha Original: ${cotizacion.fecha}</p>
-            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-              <tr style="background-color: #f8fafc; text-align: left;">
-                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Cant.</th>
-                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Descripción</th>
-                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Precio Unit.</th>
-                <th style="padding: 10px; border-bottom: 2px solid #ddd;">Subtotal</th>
-              </tr>
-              ${filasHTML}
-            </table>
-            <h2 style="text-align: right; margin-top: 30px;">Total: $${cotizacion.total.toFixed(2)}</h2>
-          </body>
-        </html>
-      `;
-
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri);
-    } catch (error) {
-      Alert.alert("Error", "No se pudo regenerar el documento.");
-    }
+      const perfilGuardado = await AsyncStorage.getItem("perfilEmpresa");
+      const perfil = perfilGuardado ? JSON.parse(perfilGuardado) : null;
+      await generarCotizacionProfesional(cotizacion.cliente, cotizacion.items, cotizacion.total, perfil);
+    } catch (error) { Alert.alert("Error", "No se pudo regenerar."); }
   };
 
   const dynamicStyles = {
-    container: { backgroundColor: isDark ? "#0F172A" : "#F8FAFC" },
-    text: { color: isDark ? "#F1F5F9" : "#0F172A" },
+    container: { backgroundColor: isDark ? "#0F172A" : "#F8FAFC" }, text: { color: isDark ? "#F1F5F9" : "#0F172A" },
     subText: { color: isDark ? "#94A3B8" : "#64748B" },
+    input: { backgroundColor: isDark ? "#1E293B" : "#FFFFFF", borderColor: isDark ? "#334155" : "#CBD5E1", color: isDark ? "#F8FAFC" : "#0F172A" },
     card: { backgroundColor: isDark ? "#1E293B" : "#FFFFFF", borderColor: isDark ? "#334155" : "#E2E8F0" }
   };
 
   const ThemeOption = ({ title, value, icon }: { title: string, value: string, icon: any }) => (
-    <TouchableOpacity 
-      style={[styles.option, dynamicStyles.card, themePreference === value && styles.optionSelected]} 
-      onPress={() => setThemePreference(value)}
-    >
+    <TouchableOpacity style={[styles.option, dynamicStyles.card, themePreference === value && styles.optionSelected]} onPress={() => setThemePreference(value)}>
       <Ionicons name={icon} size={24} color={themePreference === value ? "#0EA5E9" : (isDark ? "#94A3B8" : "#64748B")} />
-      <Text style={[styles.optionText, dynamicStyles.text, themePreference === value && {color: "#0EA5E9", fontWeight: 'bold'}]}>
-        {title}
-      </Text>
+      <Text style={[styles.optionText, dynamicStyles.text, themePreference === value && {color: "#0EA5E9", fontWeight: 'bold'}]}>{title}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={[styles.container, dynamicStyles.container]}>
+    <ScrollView style={dynamicStyles.container}>
+      <View style={styles.container}>
         
+        {/* PERFIL EMPRESA */}
+        <Text style={[styles.title, dynamicStyles.text]}>Perfil de tu Empresa (PDF)</Text>
+        <View style={[styles.card, dynamicStyles.card, {padding: 16, marginBottom: 20}]}>
+          
+          <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
+            <TouchableOpacity onPress={seleccionarLogo} style={{width: 80, height: 80, borderRadius: 40, backgroundColor: isDark ? '#334155' : '#E2E8F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 16}}>
+              {logoEmpresa ? <Image source={{ uri: logoEmpresa }} style={{width: 80, height: 80}} /> : <Ionicons name="camera" size={30} color="#94A3B8" />}
+            </TouchableOpacity>
+            <View style={{flex: 1}}>
+              <Text style={[dynamicStyles.text, {fontWeight: 'bold', marginBottom: 4}]}>Logo Institucional</Text>
+              <Text style={dynamicStyles.subText}>Aparecerá en el encabezado de tus cotizaciones.</Text>
+            </View>
+          </View>
+
+          <TextInput style={[styles.input, dynamicStyles.input, {marginBottom: 10}]} placeholder="Nombre de la Empresa" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={nombreEmpresa} onChangeText={setNombreEmpresa} />
+          <TextInput style={[styles.input, dynamicStyles.input, {marginBottom: 10}]} placeholder="Teléfono" keyboardType="phone-pad" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={telefonoEmpresa} onChangeText={setTelefonoEmpresa} />
+          <TextInput style={[styles.input, dynamicStyles.input, {marginBottom: 10}]} placeholder="Correo Electrónico" keyboardType="email-address" autoCapitalize="none" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={emailEmpresa} onChangeText={setEmailEmpresa} />
+          
+          <TouchableOpacity style={{backgroundColor: "#10B981", padding: 12, borderRadius: 8, alignItems: "center"}} onPress={guardarPerfil}>
+            <Text style={{color: "#FFF", fontWeight: "bold"}}>Guardar Perfil</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.title, dynamicStyles.text]}>Apariencia</Text>
-        <ThemeOption title="Automático (Sistema)" value="system" icon="phone-portrait-outline" />
+        <ThemeOption title="Automático" value="system" icon="phone-portrait-outline" />
         <ThemeOption title="Modo Claro" value="light" icon="sunny-outline" />
         <ThemeOption title="Modo Oscuro" value="dark" icon="moon-outline" />
 
         <View style={styles.divider} />
-
-        <Text style={[styles.title, dynamicStyles.text]}>Herramientas de Desarrollador</Text>
+        <Text style={[styles.title, dynamicStyles.text]}>Herramientas Dev</Text>
         <TouchableOpacity style={[styles.option, dynamicStyles.card, {borderColor: '#8B5CF6'}]} onPress={ejecutarLectorPruebaPDF}>
           <Ionicons name="terminal-outline" size={24} color="#8B5CF6" />
-          <Text style={[styles.optionText, dynamicStyles.text, {fontWeight: '600'}]}>Lector PDF (Volcar Texto en Terminal)</Text>
+          <Text style={[styles.optionText, dynamicStyles.text]}>Test Lector PDF</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
-
         <View style={styles.historyHeader}>
-          <Text style={[styles.title, dynamicStyles.text, {marginBottom: 0}]}>Historial de Proyectos</Text>
-          {historial.length > 0 && (
-            <TouchableOpacity onPress={limpiarHistorial}>
-              <Ionicons name="trash-outline" size={24} color="#EF4444" />
-            </TouchableOpacity>
-          )}
+          <Text style={[styles.title, dynamicStyles.text, {marginBottom: 0}]}>Historial (PRO)</Text>
+          {historial.length > 0 && <TouchableOpacity onPress={limpiarHistorial}><Ionicons name="trash-outline" size={24} color="#EF4444" /></TouchableOpacity>}
         </View>
 
-        <View style={{ flex: 1, marginTop: 16 }}>
-          <FlatList
-            data={historial}
-            keyExtractor={(item) => item.id}
-            ListEmptyComponent={<Text style={[dynamicStyles.subText, {textAlign: 'center', marginTop: 20}]}>No hay cotizaciones guardadas aún.</Text>}
-            renderItem={({ item }) => (
-              <View style={[styles.historyCard, dynamicStyles.card]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.historyClient, dynamicStyles.text]}>{item.cliente}</Text>
-                  <Text style={dynamicStyles.subText}>{item.fecha}</Text>
-                  <Text style={[styles.historyTotal, dynamicStyles.text]}>${item.total.toFixed(2)}</Text>
-                </View>
-                
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => editarCotizacion(item.id)}>
-                    <Ionicons name="pencil" size={22} color="#0EA5E9" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.iconBtn, {marginLeft: 10}]} onPress={() => compartirCotizacionPDF(item)}>
-                    <Ionicons name="share-social" size={22} color="#10B981" />
-                  </TouchableOpacity>
-                </View>
+        <View style={{ marginTop: 16 }}>
+          {historial.map((item) => (
+            <View key={item.id} style={[styles.historyCard, dynamicStyles.card]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.historyClient, dynamicStyles.text]}>{item.cliente}</Text>
+                <Text style={dynamicStyles.subText}>{item.fecha}</Text>
+                <Text style={{fontSize: 16, fontWeight: "bold", color: "#10B981"}}>${item.total.toFixed(2)}</Text>
               </View>
-            )}
-          />
-
-          {!isPro && (
-            <BlurView intensity={90} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill}>
-              <View style={styles.lockContainerMin}>
-                <Ionicons name="lock-closed" size={40} color="#0EA5E9" />
-                <Text style={[styles.lockTitleMin, { color: isDark ? "#FFF" : "#0F172A" }]}>Historial PRO</Text>
-                <TouchableOpacity style={styles.buyButtonMin} onPress={() => setIsPro(true)}>
-                  <Text style={styles.buyButtonTextMin}>Desbloquear (Test)</Text>
-                </TouchableOpacity>
+              <View style={{flexDirection: "row"}}>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => router.push({ pathname: "/quotes", params: { editId: item.id } })}><Ionicons name="pencil" size={22} color="#0EA5E9" /></TouchableOpacity>
+                <TouchableOpacity style={[styles.iconBtn, {marginLeft: 10}]} onPress={() => compartirCotizacionPDF(item)}><Ionicons name="share-social" size={22} color="#10B981" /></TouchableOpacity>
               </View>
-            </BlurView>
-          )}
+            </View>
+          ))}
         </View>
 
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { padding: 20, paddingBottom: 50 },
   title: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },
+  card: { borderRadius: 12, borderWidth: 1 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
   option: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
   optionSelected: { borderColor: "#0EA5E9", backgroundColor: "rgba(14, 165, 233, 0.1)" },
   optionText: { fontSize: 16, marginLeft: 12 },
@@ -228,11 +184,5 @@ const styles = StyleSheet.create({
   historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   historyCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
   historyClient: { fontSize: 18, fontWeight: "bold", marginBottom: 4 },
-  historyTotal: { fontSize: 16, fontWeight: "bold", color: "#10B981", marginTop: 4 },
-  actionButtons: { flexDirection: "row" },
-  iconBtn: { padding: 8, backgroundColor: "rgba(0,0,0,0.05)", borderRadius: 8 },
-  lockContainerMin: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  lockTitleMin: { fontSize: 18, fontWeight: "bold", marginTop: 10, marginBottom: 15 },
-  buyButtonMin: { backgroundColor: "#0EA5E9", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },
-  buyButtonTextMin: { color: "#FFF", fontSize: 14, fontWeight: "bold" }
+  iconBtn: { padding: 8, backgroundColor: "rgba(0,0,0,0.05)", borderRadius: 8 }
 });
