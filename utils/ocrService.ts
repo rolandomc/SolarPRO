@@ -5,22 +5,43 @@ interface Bimestre {
   kwh: number;
 }
 
-// Limpia el nombre del cliente: quita RFC, números largos y texto basura
+// Limpia el nombre del cliente extrayendo solo el nombre de persona
 const limpiarNombreCliente = (raw: string): string => {
-  if (!raw) return "";
-  // Eliminar RFC (patrón alfanumérico de 12-13 chars con guión)
-  let nombre = raw.replace(/[A-Z]{3,4}\d{6}[A-Z0-9]{3}/gi, "");
-  // Eliminar líneas con palabras clave que no son nombres
-  const palabrasBasura = ["RFC", "TARIFA", "MEDIDOR", "CUENTA", "SERVICIO", "CFE", "LIMITE", "PAGO", "CORTE"];
-  for (const palabra of palabrasBasura) {
-    if (nombre.toUpperCase().includes(palabra)) return "";
+  if (!raw || raw.trim().length === 0) return "";
+
+  // Tomar solo la parte ANTES de cualquier keyword de recibo
+  const cortadores = [
+    "TOTAL", "PAGAR", "RFC", "TARIFA", "MEDIDOR", "CUENTA",
+    "SERVICIO", "CFE", "LIMITE", "CORTE", "VASCO", "FRACC",
+    "COL.", "AV.", "CALLE", "CP.", "C.P.", "NO.", "#",
+    "DESCARGA", "PERIODO", "IMPORTE",
+  ];
+
+  let texto = raw.trim();
+
+  // Cortar en el primer keyword encontrado
+  for (const corte of cortadores) {
+    const idx = texto.toUpperCase().indexOf(corte);
+    if (idx > 0) {
+      texto = texto.substring(0, idx).trim();
+    }
   }
-  // Limpiar espacios y caracteres extraños
-  nombre = nombre.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").trim();
-  // Validar que tenga al menos 2 palabras (nombre + apellido)
-  const palabras = nombre.split(/\s+/).filter(p => p.length > 1);
+
+  // Eliminar RFC alfanumerico (3-4 letras + 6 digitos + 3 chars)
+  texto = texto.replace(/[A-Z]{3,4}\d{6}[A-Z0-9]{3,2}/gi, "");
+
+  // Eliminar numeros y caracteres que no sean letras o espacios
+  texto = texto.replace(/[^a-zA-Z\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da\u00f1\u00d1\s]/g, "").trim();
+
+  // Limpiar espacios multiples
+  texto = texto.replace(/\s{2,}/g, " ").trim();
+
+  // Validar: al menos 2 palabras de mas de 1 letra (nombre + apellido)
+  const palabras = texto.split(/\s+/).filter(p => p.length > 1);
   if (palabras.length < 2) return "";
-  return palabras.join(" ");
+
+  // Maximo 5 palabras (nombre completo razonable)
+  return palabras.slice(0, 5).join(" ");
 };
 
 export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mimeType: string) => {
@@ -46,16 +67,19 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
 
     // 1. Extraer y limpiar nombre del cliente
     let cliente = "";
-    // Buscar todas las líneas después de "FEDERAL DE ELECTRICIDAD" y tomar la primera válida
     const indiceCFE = lineas.findIndex((l: string) => l.toUpperCase().includes("FEDERAL DE ELECTRICIDAD"));
     if (indiceCFE !== -1) {
-      for (let i = indiceCFE + 1; i < Math.min(indiceCFE + 5, lineas.length); i++) {
+      // Intentar hasta 5 lineas despues del header CFE
+      for (let i = indiceCFE + 1; i < Math.min(indiceCFE + 6, lineas.length); i++) {
         const candidato = limpiarNombreCliente(lineas[i]);
-        if (candidato.length > 4) { cliente = candidato; break; }
+        if (candidato.length > 4) {
+          cliente = candidato;
+          break;
+        }
       }
     }
 
-    // 2. Historial de consumos — formato CFE real:
+    // 2. Historial de consumos - formato CFE real:
     // "del 05 DIC 25 al 05 FEB 26  683  $1,879.00"
     const regexHistorialCFE = /del\s+(\d{1,2}\s+\w+\s+\d{2})\s+al\s+(\d{1,2}\s+\w+\s+\d{2})\s+([\d,]+)\s+\$/gi;
     let matchH;
@@ -81,7 +105,6 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
       consumo = String(promedioMensual);
       mensaje = `Promedio de ${ultimos.length} bimestres detectados`;
     } else {
-      // Fallback: tabla de energía del periodo
       const regexEnergiaPeriodo = /Energ[i\u00ed]a\s*\(kWh\)\s+[\d,]+\s+[\d,]+\s+([\d,]+)/i;
       const matchEnergia = textoCompleto.match(regexEnergiaPeriodo);
       if (matchEnergia) {

@@ -11,18 +11,14 @@ import { obtenerHSPDesdeNasa, calcularProtecciones } from "../utils/engineering"
 import { PANELES_DB, INVERSORES_DB } from "../data/componentsDB";
 import { useRouter } from "expo-router";
 
-// Función para sugerir el inversor más adecuado según potencia del arreglo
 const sugerirInversor = (potenciaKW: number) => {
   const potenciaW = potenciaKW * 1000;
-  // Busca el inversor cuya entrada DC máxima sea >= potencia del arreglo,
-  // eligiendo el más pequeño que alcance (mínimo sobredimensionamiento)
   const candidatos = INVERSORES_DB.filter(inv => inv.max_dc_input >= potenciaW);
   if (candidatos.length > 0) {
     return candidatos.reduce((prev, curr) =>
       curr.max_dc_input < prev.max_dc_input ? curr : prev
     );
   }
-  // Si ninguno alcanza, devolver el más grande disponible
   return INVERSORES_DB.reduce((prev, curr) =>
     curr.max_dc_input > prev.max_dc_input ? curr : prev
   );
@@ -56,10 +52,10 @@ export default function ProCalculator() {
   };
 
   const obtenerGPSyNASA = async () => {
-    Alert.alert("Obteniendo Datos", "Conectando con GPS y NASA POWER...");
     const res = await obtenerHSPDesdeNasa();
     if (res.exito && res.hsp) {
       setHsp(res.hsp.toFixed(2).toString());
+      Alert.alert("HSP obtenido", `HSP: ${res.hsp.toFixed(2)} horas pico solar`);
     } else {
       Alert.alert("Error", res.error);
     }
@@ -69,52 +65,50 @@ export default function ProCalculator() {
     const cons = parseFloat(consumo);
     const hspNum = parseFloat(hsp);
     const panel = PANELES_DB.find(p => p.id === panelSelId);
-
     if (isNaN(cons) || isNaN(hspNum) || !panel) return Alert.alert("Faltan datos", "Completa consumo, HSP y panel.");
 
     const energiaDiaria = (cons / 30) * 1.2;
     const potenciaArregloW = (energiaDiaria / hspNum) * 1000;
     const numPaneles = Math.ceil(potenciaArregloW / panel.pmax);
     const potenciaKW = (numPaneles * panel.pmax) / 1000;
-
-    // Inversor sugerido automáticamente
     const inversorSugerido = sugerirInversor(potenciaKW);
     const protecciones = calcularProtecciones(panel, inversorSugerido, numPaneles);
-
     const sobredimensionado = potenciaKW * 1000 > inversorSugerido.max_dc_input;
 
+    // Calculo de costo estimado con precios de BD
+    const costoPaneles = numPaneles * panel.precio_mxn;
+    const costoInversor = inversorSugerido.precio_mxn;
+    const costoInstalacion = Math.round(potenciaKW * 1000 * 8); // ~$8 MXN/W mano de obra
+    const costoTotal = costoPaneles + costoInversor + costoInstalacion;
+
     setResultados({
-      numPaneles,
-      potenciaKW,
-      inversor: inversorSugerido,
-      sobredimensionado,
-      protecciones,
-      panelObj: panel,
+      numPaneles, potenciaKW, inversor: inversorSugerido,
+      sobredimensionado, protecciones, panelObj: panel,
+      costoPaneles, costoInversor, costoInstalacion, costoTotal,
     });
   };
 
   const enviarACotizacion = () => {
-    if (!resultados) return Alert.alert("Calcula primero", "Ejecuta la ingeniería antes de cotizar.");
+    if (!resultados) return Alert.alert("Calcula primero", "Ejecuta la ingenieria antes de cotizar.");
     const nombreCliente = cliente.trim() || "Cliente";
-    // Construir items pre-cargados para la cotización
     const itemsParam = JSON.stringify([
       {
         id: "1",
-        descripcion: `Panel Solar ${resultados.panelObj.marca} ${resultados.panelObj.modelo} ${resultados.panelObj.pmax}W`,
+        descripcion: `Panel Solar ${resultados.panelObj.marca} ${resultados.panelObj.modelo}`,
         cantidad: String(resultados.numPaneles),
-        precio: "0",
+        precio: String(resultados.panelObj.precio_mxn),
       },
       {
         id: "2",
-        descripcion: `Inversor ${resultados.inversor.marca} ${resultados.inversor.modelo} (${(resultados.inversor.max_dc_input / 1000).toFixed(1)} kW)`,
+        descripcion: `Inversor ${resultados.inversor.marca} ${resultados.inversor.modelo}`,
         cantidad: "1",
-        precio: "0",
+        precio: String(resultados.inversor.precio_mxn),
       },
       {
         id: "3",
-        descripcion: `Sistema Fotovoltaico ${resultados.potenciaKW.toFixed(2)} kWp instalado`,
+        descripcion: `Instalacion sistema ${resultados.potenciaKW.toFixed(2)} kWp (mano de obra y materiales)`,
         cantidad: "1",
-        precio: "0",
+        precio: String(resultados.costoInstalacion),
       },
     ]);
     router.push({
@@ -137,7 +131,6 @@ export default function ProCalculator() {
         <View style={styles.container}>
           <Text style={[styles.title, ds.text]}>Dimensionamiento Profesional</Text>
 
-          {/* Botones acción */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#8B5CF6" }]} onPress={escanearReciboPRO}>
               <Ionicons name="document-text" size={20} color="#FFF" />
@@ -149,9 +142,8 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* Formulario */}
           <View style={[styles.card, ds.card]}>
-            <TextInput style={[styles.input, ds.input, { marginBottom: 10 }]} placeholder="Cliente / Dirección" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={cliente} onChangeText={setCliente} />
+            <TextInput style={[styles.input, ds.input, { marginBottom: 10 }]} placeholder="Cliente / Direccion" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={cliente} onChangeText={setCliente} />
             <View style={styles.row}>
               <TextInput style={[styles.input, ds.input, { width: "48%" }]} placeholder="Consumo mensual kWh" keyboardType="numeric" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={consumo} onChangeText={setConsumo} />
               <TextInput style={[styles.input, ds.input, { width: "48%" }]} placeholder="HSP" keyboardType="numeric" placeholderTextColor={isDark ? "#64748B" : "#94A3B8"} value={hsp} onChangeText={setHsp} />
@@ -161,22 +153,21 @@ export default function ProCalculator() {
             <View style={[styles.pickerWrap, { borderColor: isDark ? "#334155" : "#CBD5E1" }]}>
               <Picker selectedValue={panelSelId} style={{ color: isDark ? "#F8FAFC" : "#000" }} onValueChange={setPanelSelId}>
                 {PANELES_DB.map(p => (
-                  <Picker.Item key={p.id} label={`${p.marca} ${p.modelo} – ${p.pmax}W`} value={p.id} />
+                  <Picker.Item key={p.id} label={`${p.marca} ${p.modelo} - $${p.precio_mxn.toLocaleString()}`} value={p.id} />
                 ))}
               </Picker>
             </View>
 
             <TouchableOpacity style={styles.calcBtn} onPress={calcularProyecto}>
-              <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 16 }}>Ejecutar Ingeniería</Text>
+              <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 16 }}>Ejecutar Ingenieria</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Resultados */}
           {resultados && (
             <View style={[styles.card, ds.card, { marginTop: 20 }]}>
-              <Text style={[styles.title, { color: "#10B981" }]}>Memoria de Cálculo</Text>
+              <Text style={[styles.title, { color: "#10B981" }]}>Memoria de Calculo</Text>
 
-              {/* Paneles — tarjeta visual */}
+              {/* Chips paneles */}
               <Text style={[styles.sectionLabel, ds.text]}>Arreglo Fotovoltaico</Text>
               <View style={styles.chipsRow}>
                 <View style={styles.chip}>
@@ -195,30 +186,21 @@ export default function ProCalculator() {
                   <Text style={styles.chipLabel}>c/panel</Text>
                 </View>
               </View>
-              <Text style={[ds.sub, { marginBottom: 4, fontSize: 13 }]}>
-                {resultados.panelObj.marca} {resultados.panelObj.modelo}
-              </Text>
+              <Text style={[ds.sub, { fontSize: 13, marginBottom: 4 }]}>{resultados.panelObj.marca} {resultados.panelObj.modelo}</Text>
+              <Text style={[ds.sub, { fontSize: 13, marginBottom: 8 }]}>Precio unitario: ${resultados.panelObj.precio_mxn.toLocaleString()} MXN</Text>
 
               <View style={styles.divider} />
 
-              {/* Inversor sugerido — tarjeta */}
+              {/* Inversor sugerido */}
               <Text style={[styles.sectionLabel, ds.text]}>Inversor Sugerido</Text>
               <View style={[styles.inversorCard, { borderColor: resultados.sobredimensionado ? "#EF4444" : "#10B981" }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>
-                    {resultados.inversor.marca} {resultados.inversor.modelo}
-                  </Text>
-                  <Text style={ds.sub}>
-                    Entrada CC máx: {(resultados.inversor.max_dc_input / 1000).toFixed(1)} kW
-                  </Text>
-                  {resultados.sobredimensionado && (
-                    <Text style={{ color: "#EF4444", fontWeight: "bold", marginTop: 4 }}>
-                      ⚠️ Excede la capacidad — considera uno mayor
-                    </Text>
-                  )}
-                  {!resultados.sobredimensionado && (
-                    <Text style={{ color: "#10B981", marginTop: 4 }}>✓ Dimensionamiento correcto</Text>
-                  )}
+                  <Text style={[ds.text, { fontWeight: "bold", fontSize: 15 }]}>{resultados.inversor.marca} {resultados.inversor.modelo}</Text>
+                  <Text style={ds.sub}>Entrada CC max: {(resultados.inversor.max_dc_input / 1000).toFixed(1)} kW</Text>
+                  <Text style={ds.sub}>Precio: ${resultados.inversor.precio_mxn.toLocaleString()} MXN</Text>
+                  {resultados.sobredimensionado
+                    ? <Text style={{ color: "#EF4444", fontWeight: "bold", marginTop: 4 }}>Excede capacidad - considera uno mayor</Text>
+                    : <Text style={{ color: "#10B981", marginTop: 4 }}> Dimensionamiento correcto</Text>}
                 </View>
                 <Ionicons name="hardware-chip" size={36} color={resultados.sobredimensionado ? "#EF4444" : "#10B981"} />
               </View>
@@ -226,18 +208,38 @@ export default function ProCalculator() {
               <View style={styles.divider} />
 
               {/* Protecciones */}
-              <Text style={[styles.sectionLabel, ds.text]}>Protecciones Lado CC</Text>
-              <Text style={ds.sub}>• Voltaje Voc String: {resultados.protecciones.voltajeSistema} VDC</Text>
-              <Text style={ds.sub}>• Fusibles: {resultados.protecciones.fusibleCC}A</Text>
-              <Text style={ds.sub}>• Calibre Solar: {resultados.protecciones.cableCC}</Text>
+              <Text style={[styles.sectionLabel, ds.text]}>Protecciones CC</Text>
+              <Text style={ds.sub}> Voltaje Voc String: {resultados.protecciones.voltajeSistema} VDC</Text>
+              <Text style={ds.sub}> Fusibles: {resultados.protecciones.fusibleCC}A</Text>
+              <Text style={ds.sub}> Calibre Solar: {resultados.protecciones.cableCC}</Text>
+              <Text style={[styles.sectionLabel, ds.text, { marginTop: 12 }]}>Protecciones CA</Text>
+              <Text style={ds.sub}> Termomag: {resultados.protecciones.pastillaCA}A</Text>
+              <Text style={ds.sub}> Calibre THW-LS: {resultados.protecciones.cableCA}</Text>
 
-              <Text style={[styles.sectionLabel, ds.text, { marginTop: 12 }]}>Protecciones Lado CA</Text>
-              <Text style={ds.sub}>• Termomagnético: {resultados.protecciones.pastillaCA}A</Text>
-              <Text style={ds.sub}>• Calibre THW-LS: {resultados.protecciones.cableCA}</Text>
+              <View style={styles.divider} />
+
+              {/* Resumen de costos */}
+              <Text style={[styles.sectionLabel, ds.text]}>Estimado de Costos</Text>
+              <View style={styles.costoRow}>
+                <Text style={ds.sub}>Paneles ({resultados.numPaneles} x ${resultados.panelObj.precio_mxn.toLocaleString()})</Text>
+                <Text style={[ds.text, { fontWeight: "bold" }]}>${resultados.costoPaneles.toLocaleString()}</Text>
+              </View>
+              <View style={styles.costoRow}>
+                <Text style={ds.sub}>Inversor</Text>
+                <Text style={[ds.text, { fontWeight: "bold" }]}>${resultados.costoInversor.toLocaleString()}</Text>
+              </View>
+              <View style={styles.costoRow}>
+                <Text style={ds.sub}>Instalacion y materiales</Text>
+                <Text style={[ds.text, { fontWeight: "bold" }]}>${resultados.costoInstalacion.toLocaleString()}</Text>
+              </View>
+              <View style={[styles.costoRow, { borderTopWidth: 1, borderColor: "#CBD5E1", marginTop: 6, paddingTop: 8 }]}>
+                <Text style={[ds.text, { fontWeight: "bold", fontSize: 16 }]}>TOTAL ESTIMADO</Text>
+                <Text style={{ fontWeight: "bold", fontSize: 18, color: "#10B981" }}>${resultados.costoTotal.toLocaleString()}</Text>
+              </View>
 
               <TouchableOpacity style={[styles.calcBtn, { backgroundColor: "#0EA5E9", marginTop: 20 }]} onPress={enviarACotizacion}>
                 <Ionicons name="document-text-outline" size={20} color="#FFF" />
-                <Text style={{ color: "#FFF", fontWeight: "bold", marginLeft: 8, fontSize: 15 }}>Preparar Cotización</Text>
+                <Text style={{ color: "#FFF", fontWeight: "bold", marginLeft: 8, fontSize: 15 }}>Preparar Cotizacion</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -266,4 +268,5 @@ const styles = StyleSheet.create({
   chipLabel:    { fontSize: 12, color: "#64748B", marginTop: 2 },
   inversorCard: { flexDirection: "row", alignItems: "center", borderWidth: 2, borderRadius: 10, padding: 14, marginBottom: 8 },
   divider:      { height: 1, backgroundColor: "#CBD5E1", marginVertical: 14 },
+  costoRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
 });
