@@ -45,7 +45,6 @@ export default function Settings() {
     router.push({ pathname: "/quotes", params: { editId: id } });
   };
 
-  // NUEVA FUNCIÓN: Lector de desarrollo que imprime el texto bruto en la terminal
   const ejecutarLectorPruebaPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -155,7 +154,6 @@ export default function Settings() {
 
         <View style={styles.divider} />
 
-        {/* NUEVA SECCIÓN: Herramienta de lectura técnica */}
         <Text style={[styles.title, dynamicStyles.text]}>Herramientas de Desarrollador</Text>
         <TouchableOpacity style={[styles.option, dynamicStyles.card, {borderColor: '#8B5CF6'}]} onPress={ejecutarLectorPruebaPDF}>
           <Ionicons name="terminal-outline" size={24} color="#8B5CF6" />
@@ -164,14 +162,15 @@ export default function Settings() {
 
         <View style={styles.divider} />
 
-        <div style={styles.historyHeader}>
+        {/* CORRECCIÓN: Aquí se cambió el <div> por <View> */}
+        <View style={styles.historyHeader}>
           <Text style={[styles.title, dynamicStyles.text, {marginBottom: 0}]}>Historial de Proyectos</Text>
           {historial.length > 0 && (
             <TouchableOpacity onPress={limpiarHistorial}>
               <Ionicons name="trash-outline" size={24} color="#EF4444" />
             </TouchableOpacity>
           )}
-        </div>
+        </View>
 
         <View style={{ flex: 1, marginTop: 16 }}>
           <FlatList
