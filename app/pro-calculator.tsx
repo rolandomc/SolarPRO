@@ -17,84 +17,61 @@ import {
 import { PANELES_DB, INVERSORES_DB } from '../data/componentsDB';
 import { useRouter } from 'expo-router';
 
-// ─── Selector de inversor por potencia Y fases ─────────────────────────────
-// Solo se elige entre inversores que coincidan con el tipo de suministro.
 const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   const w = potenciaKW * 1000;
   const candidatos = INVERSORES_DB.filter(i => i.fases === fases && i.max_dc_input >= w);
   if (candidatos.length > 0)
     return candidatos.reduce((p, c) => c.max_dc_input < p.max_dc_input ? c : p);
-  // Fallback: si no hay de esa fase, tomar el mas grande disponible
   const fallback = INVERSORES_DB.filter(i => i.fases === fases);
   if (fallback.length > 0)
     return fallback.reduce((p, c) => c.max_dc_input > p.max_dc_input ? c : p);
-  // Ultimo recurso: cualquier inversor
   return INVERSORES_DB.reduce((p, c) => c.max_dc_input > p.max_dc_input ? c : p);
 };
-
-// Etiqueta de fases para mostrar en UI
-const labelFases = (fases: 1 | 3, voltaje: number) =>
-  fases === 1
-    ? `Monofásico ${voltaje}V (L1-L2-N)`
-    : `Trifásico ${voltaje}V (L1-L2-L3-N)`;
 
 export default function ProCalculator() {
   const { isDark } = useContext(ThemeContext);
   const router = useRouter();
 
-  const [cliente, setCliente]         = useState('');
-  const [consumo, setConsumo]         = useState('');
-  const [hsp, setHsp]                 = useState('');
-  const [panelSelId, setPanelSelId]   = useState(PANELES_DB[0].id);
+  const [cliente, setCliente]       = useState('');
+  const [consumo, setConsumo]       = useState('');
+  const [hsp, setHsp]               = useState('');
+  const [panelSelId, setPanelSelId] = useState(PANELES_DB[0].id);
   const [tipoConexion, setTipoConexion] = useState<TipoConexion>({
-    tarifa: 'Residencial',
-    fases: 1,
-    descripcion: 'Residencial — 220V bifásico L1-L2-N',
-    voltajeAC: 220,
+    tarifa: 'Residencial', fases: 1,
+    descripcion: 'Residencial — 220V bifásico L1-L2-N', voltajeAC: 220,
   });
-  const [modalPaneles, setModalPaneles]         = useState(false);
-  const [modalInversores, setModalInversores]   = useState(false);
-  const [modalFases, setModalFases]             = useState(false);
+  const [modalPaneles, setModalPaneles]       = useState(false);
+  const [modalInversores, setModalInversores] = useState(false);
+  const [modalFases, setModalFases]           = useState(false);
   const [inversoresCompatibles, setInversoresCompatibles] = useState<any[]>([]);
-  const [resultados, setResultados]             = useState<any>(null);
+  const [resultados, setResultados] = useState<any>(null);
 
   const panelSel = PANELES_DB.find(p => p.id === panelSelId) || PANELES_DB[0];
 
-  // Opciones manuales de tipo de conexion
   const opcionesFases: TipoConexion[] = [
-    { tarifa: 'Residencial',    fases: 1, descripcion: 'Residencial / DAC — 220V bifásico L1-L2-N',       voltajeAC: 220 },
-    { tarifa: 'General BT',     fases: 1, descripcion: 'General BT monofásico — 220V L1-L2-N',           voltajeAC: 220 },
-    { tarifa: 'General 3F',     fases: 3, descripcion: 'General BT trifásico — 220V L1-L2-L3-N',         voltajeAC: 380 },
-    { tarifa: 'HM / MT',        fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F',      voltajeAC: 380 },
+    { tarifa: 'Residencial', fases: 1, descripcion: 'Residencial / DAC — 220V bifásico L1-L2-N', voltajeAC: 220 },
+    { tarifa: 'General BT',  fases: 1, descripcion: 'General BT monofásico — 220V L1-L2-N',      voltajeAC: 220 },
+    { tarifa: 'General 3F',  fases: 3, descripcion: 'General BT trifásico — 220V L1-L2-L3-N',    voltajeAC: 380 },
+    { tarifa: 'HM / MT',     fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F', voltajeAC: 380 },
   ];
 
-  // ── Acciones ──────────────────────────────────────────────────────────────
+  // ─ Acciones ──────────────────────────────────────────────────────────────
   const escanearPDF = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true,
-      });
+      const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
       if (!result.canceled) {
         Alert.alert('Analizando', 'Extrayendo datos del recibo...');
         const file = result.assets[0];
         const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
         if (r.exito) {
-          if (r.consumo)  setConsumo(r.consumo);
-          if (r.cliente)  setCliente(r.cliente);
+          if (r.consumo)    setConsumo(r.consumo);
+          if (r.cliente)    setCliente(r.cliente);
           if (r.tipoConexion) {
             setTipoConexion(r.tipoConexion);
-            Alert.alert(
-              'Recibo analizado',
-              `Cliente: ${r.cliente || '(no detectado)'}\n` +
-              `Consumo: ${r.consumo} kWh/mes\n` +
-              `Conexión: ${r.tipoConexion.descripcion}\n\n` +
-              `${r.mensaje || ''}`,
-            );
+            Alert.alert('Recibo analizado',
+              `Cliente: ${r.cliente || '(no detectado)'}\nConsumo: ${r.consumo} kWh/mes\nConexión: ${r.tipoConexion.descripcion}\n\n${r.mensaje || ''}`);
           }
-        } else {
-          Alert.alert('Error OCR', r.error);
-        }
+        } else Alert.alert('Error OCR', r.error);
       }
     } catch { Alert.alert('Error', 'Fallo al leer PDF.'); }
   };
@@ -113,24 +90,21 @@ export default function ProCalculator() {
     if (isNaN(cons) || isNaN(hspNum) || hspNum <= 0)
       return Alert.alert('Faltan datos', 'Completa consumo y HSP.');
 
-    const panel = panelSel;
-    // kWh/dia con factor de perdidas 1.20
+    const panel       = panelSel;
     const eDiaria     = (cons / 30) * 1.20;
     const potArregloW = (eDiaria / hspNum) * 1000;
     const numPaneles  = Math.ceil(potArregloW / panel.pmax);
     const potenciaKW  = (numPaneles * panel.pmax) / 1000;
 
-    // Elegir inversor segun FASES detectadas del recibo
-    const inversor = elegirInversorPorPotenciaYFases(potenciaKW, tipoConexion.fases);
+    const inversor     = elegirInversorPorPotenciaYFases(potenciaKW, tipoConexion.fases);
     const protecciones = calcularProtecciones(panel, inversor, numPaneles);
-    const st = protecciones.strings;
+    const st           = protecciones.strings;
 
     const costoPaneles     = numPaneles * panel.precio_mxn;
     const costoInversor    = inversor.precio_mxn;
     const costoInstalacion = Math.round(potenciaKW * 1000 * 8);
     const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
 
-    // Si hay errores NOM, buscar inversores compatibles de la misma fase
     let compatibles: any[] = [];
     if (st.errores.length > 0) {
       compatibles = sugerirInversorCompatible(panel, numPaneles, INVERSORES_DB, potenciaKW)
@@ -152,17 +126,14 @@ export default function ProCalculator() {
   const cambiarAInversor = (nuevoInversor: any) => {
     setModalInversores(false);
     if (!resultados) return;
-    const panel      = resultados.panelObj;
-    const numPaneles = resultados.numPaneles;
+    const panel        = resultados.panelObj;
+    const numPaneles   = resultados.numPaneles;
     const protecciones = calcularProtecciones(panel, nuevoInversor, numPaneles);
     const costoPaneles     = numPaneles * panel.precio_mxn;
     const costoInversor    = nuevoInversor.precio_mxn;
     const costoInstalacion = Math.round(resultados.potenciaKW * 1000 * 8);
     setResultados({
-      ...resultados,
-      inversor: nuevoInversor,
-      protecciones,
-      costoInversor,
+      ...resultados, inversor: nuevoInversor, protecciones, costoInversor,
       costoTotal: costoPaneles + costoInversor + costoInstalacion,
       hayErrores: protecciones.strings.errores.length > 0,
       compatibles: [],
@@ -198,7 +169,6 @@ export default function ProCalculator() {
         <View style={s.container}>
           <Text style={[s.title, d.text]}>Dimensionamiento Profesional</Text>
 
-          {/* Acciones rapidas */}
           <View style={s.row2}>
             <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#8B5CF6' }]} onPress={escanearPDF}>
               <Ionicons name="document-text" size={20} color="#FFF" />
@@ -210,7 +180,6 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* Formulario */}
           <View style={[s.card, d.card]}>
             <TextInput style={[s.input, d.input, { marginBottom:10 }]}
               placeholder="Cliente / Direccion" placeholderTextColor={isDark?'#64748B':'#94A3B8'}
@@ -226,16 +195,12 @@ export default function ProCalculator() {
                 value={hsp} onChangeText={setHsp} />
             </View>
 
-            {/* Tipo de conexion */}
             <Text style={[s.label, d.text, { marginTop:8 }]}>Tipo de suministro eléctrico:</Text>
             <TouchableOpacity style={[s.selector, d.card, {
               borderColor: tipoConexion.fases === 3 ? '#F59E0B' : '#10B981'
             }]} onPress={() => setModalFases(true)}>
-              <Ionicons
-                name={tipoConexion.fases === 3 ? 'flash' : 'home'}
-                size={22}
-                color={tipoConexion.fases === 3 ? '#F59E0B' : '#10B981'}
-              />
+              <Ionicons name={tipoConexion.fases === 3 ? 'flash' : 'home'} size={22}
+                color={tipoConexion.fases === 3 ? '#F59E0B' : '#10B981'} />
               <View style={{ flex:1, marginLeft:10 }}>
                 <Text style={[d.text, { fontWeight:'bold', fontSize:14 }]}>
                   {tipoConexion.fases === 1 ? 'Monofásico' : 'Trifásico'} — {tipoConexion.voltajeAC}V
@@ -245,7 +210,6 @@ export default function ProCalculator() {
               <Ionicons name="chevron-down" size={20} color={isDark?'#94A3B8':'#64748B'} />
             </TouchableOpacity>
 
-            {/* Selector panel */}
             <Text style={[s.label, d.text, { marginTop:8 }]}>Panel Solar:</Text>
             <TouchableOpacity style={[s.selector, d.card]} onPress={() => setModalPaneles(true)}>
               <View style={{ flex:1 }}>
@@ -260,38 +224,33 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* ═══════════ RESULTADOS ═══════════ */}
+          {/* RESULTADOS */}
           {resultados && st && (
             <View style={[s.card, d.card, { marginTop:20 }]}>
               <Text style={[s.title, { color:'#10B981' }]}>Memoria de Cálculo</Text>
               <Text style={[s.normaNote, d.sub]}>NOM-001-SEDE-2012 Art.690 / NMX-J-680-ANCE-2014</Text>
 
-              {/* Tipo de suministro detectado */}
+              {/* Badge suministro */}
               <View style={[s.conexionBadge, {
                 borderColor: resultados.tipoConexion.fases === 3 ? '#F59E0B' : '#10B981',
-                backgroundColor: resultados.tipoConexion.fases === 3
-                  ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.08)'
+                backgroundColor: resultados.tipoConexion.fases === 3 ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.08)'
               }]}>
-                <Ionicons
-                  name={resultados.tipoConexion.fases === 3 ? 'flash' : 'home'}
-                  size={18}
-                  color={resultados.tipoConexion.fases === 3 ? '#F59E0B' : '#10B981'}
-                />
+                <Ionicons name={resultados.tipoConexion.fases === 3 ? 'flash' : 'home'} size={18}
+                  color={resultados.tipoConexion.fases === 3 ? '#F59E0B' : '#10B981'} />
                 <View style={{ marginLeft:8 }}>
                   <Text style={[d.text, { fontWeight:'bold', fontSize:13 }]}>
-                    Suministro: {resultados.tipoConexion.fases === 1 ? 'Monofásico' : 'Trifásico'}
-                    {' '}— Tarifa {resultados.tipoConexion.tarifa}
+                    Suministro: {resultados.tipoConexion.fases === 1 ? 'Monofásico' : 'Trifásico'} — Tarifa {resultados.tipoConexion.tarifa}
                   </Text>
                   <Text style={[d.sub, { fontSize:12 }]}>{resultados.tipoConexion.descripcion}</Text>
                 </View>
               </View>
 
-              {/* Chips arreglo */}
+              {/* Chips */}
               <Text style={[s.secLabel, d.text]}>Arreglo FV</Text>
               <View style={s.chips}>
-                <Chip icon="sunny"            color="#F59E0B" num={String(resultados.numPaneles)}          label="Paneles" />
-                <Chip icon="flash"            color="#0EA5E9" num={resultados.potenciaKW.toFixed(2)}       label="kWp" />
-                <Chip icon="battery-charging" color="#10B981" num={`${resultados.panelObj.pmax}W`}         label="c/panel" />
+                <Chip icon="sunny"            color="#F59E0B" num={String(resultados.numPaneles)}    label="Paneles" />
+                <Chip icon="flash"            color="#0EA5E9" num={resultados.potenciaKW.toFixed(2)} label="kWp" />
+                <Chip icon="battery-charging" color="#10B981" num={`${resultados.panelObj.pmax}W`}  label="c/panel" />
               </View>
               <Text style={[d.sub, { fontSize:13, marginBottom:8 }]}>{resultados.panelObj.marca} {resultados.panelObj.modelo}</Text>
 
@@ -307,7 +266,6 @@ export default function ProCalculator() {
                 <StringBox num={st.mpptUsados}        label={`MPPT\nde ${resultados.inversor.num_mppt}`} />
               </View>
 
-              {/* Distribucion por MPPT */}
               {st.distribucionMPPT.length > 1 && (
                 <View style={[s.mpptDist, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
                   <Text style={[s.mpptDistTitle, d.sub]}>Distribución por MPPT:</Text>
@@ -319,28 +277,49 @@ export default function ProCalculator() {
                 </View>
               )}
 
-              {/* Tabla electrica */}
+              {/*
+                TABLA ELECTRICA — qué compara cada fila:
+                ┌ Voc STC            → referencia, sin badge de validación
+                ├ Voc invierno       → ≤ max_dc_volts del inversor (NOM 690.7)
+                ├ Vmp string         → referencia punto de trabajo MPPT
+                ├ Isc 1 string       → referencia, sin badge de validación
+                ├ Isc entrada MPPT   → ≤ imax_por_mppt del inversor  ← VALIDACION REAL
+                └ Isc diseño fusible → solo info, para elegir calibre fusible/cable
+              */}
               <View style={[s.tabla, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
-                <TablaFila label="Voc string (STC 25°C)"           val={`${st.vocStringStc} V`}
+                <TablaFila
+                  label="Voc string (STC 25°C)"
+                  val={`${st.vocStringStc} V`}
                   badge="ref" badgeColor="#64748B" />
-                <TablaFila label="Voc string (invierno -10°C)"     val={`${st.vocStringInvierno} V`}
+                <TablaFila
+                  label="Voc string invierno (-10°C)"
+                  val={`${st.vocStringInvierno} V`}
                   badge={st.vocDentroLimite ? '✓ OK' : '✗ FALLA'}
                   badgeColor={st.vocDentroLimite ? '#10B981' : '#EF4444'} />
-                <TablaFila label="Vmp string (trabajo MPPT)"       val={`${st.vmpString} V`}
+                <TablaFila
+                  label="Vmp string (trabajo MPPT)"
+                  val={`${st.vmpString} V`}
                   badge="MPPT" badgeColor="#0EA5E9" />
-                <TablaFila label="Isc string (STC)"                val={`${st.iscString} A`}
+                <TablaFila
+                  label="Isc de 1 string (STC)"
+                  val={`${st.iscString} A`}
                   badge="ref" badgeColor="#64748B" />
-                <TablaFila label="Isc total entrada MPPT"          val={`${st.corrienteEntradaMPPT} A`}
-                  badge="entrada" badgeColor="#64748B" />
-                <TablaFila label="Corriente diseño NOM (×1.56)"    val={`${st.corrienteDisenoCC} A`}
+                <TablaFila
+                  label={`Isc entrada MPPT (${st.stringsEnParalelo} str × ${st.iscString}A)`}
+                  val={`${st.corrienteEntradaMPPT} A`}
                   badge={st.iscDentroLimite ? '✓ OK' : '✗ FALLA'}
                   badgeColor={st.iscDentroLimite ? '#10B981' : '#EF4444'} />
-                <TablaFila label={`Límite MPPT (${resultados.inversor.marca} ${resultados.inversor.modelo})`}
+                <TablaFila
+                  label={`Límite MPPT — ${resultados.inversor.marca} ${resultados.inversor.modelo}`}
                   val={`${resultados.inversor.imax_por_mppt} A`}
-                  badge="max" badgeColor="#94A3B8" last />
+                  badge="max" badgeColor="#94A3B8" />
+                <TablaFila
+                  label="Isc diseño fusible (Isc×1.56, NOM 690.8)"
+                  val={`${st.iDisenoFusibleStr} A`}
+                  badge="fusible" badgeColor="#8B5CF6" last />
               </View>
 
-              {/* Errores de norma */}
+              {/* Errores NOM */}
               {st.errores.length > 0 && (
                 <View style={s.errorBox}>
                   <Text style={s.errorTitle}>Violación de Norma</Text>
@@ -355,7 +334,7 @@ export default function ProCalculator() {
                   )}
                   {resultados.compatibles.length === 0 && (
                     <Text style={[s.errorTxt, { marginTop:4 }]}>
-                      No hay inversor {resultados.tipoConexion.fases === 1 ? 'monofásico' : 'trifásico'} compatible en la base de datos.
+                      No hay inversor compatible en la base de datos.
                     </Text>
                   )}
                 </View>
@@ -382,10 +361,7 @@ export default function ProCalculator() {
                     {'  •  '}{resultados.inversor.num_mppt} MPPT  •  {resultados.inversor.imax_por_mppt}A/MPPT
                   </Text>
                   <Text style={d.sub}>DC max: {(resultados.inversor.max_dc_input/1000).toFixed(1)} kW  •  Vmax: {resultados.inversor.max_dc_volts}V</Text>
-                  <Text style={[{
-                    color: resultados.hayErrores ? '#EF4444' : '#10B981',
-                    marginTop:4, fontWeight:'bold', fontSize:12
-                  }]}>
+                  <Text style={[{ color: resultados.hayErrores ? '#EF4444' : '#10B981', marginTop:4, fontWeight:'bold', fontSize:12 }]}>
                     {resultados.hayErrores ? 'No cumple NOM — cambiar inversor' : 'Cumple NOM-001 / NMX-J-680'}
                   </Text>
                 </View>
@@ -396,11 +372,11 @@ export default function ProCalculator() {
 
               {/* Protecciones */}
               <Text style={[s.secLabel, d.text]}>Protecciones CC (por string)</Text>
-              <Text style={d.sub}>  Corriente diseño: {resultados.protecciones.iDisenoCC}A  (Isc × 1.56)</Text>
-              <Text style={d.sub}>  Fusible / Interruptor: {resultados.protecciones.fusibleCC}A</Text>
+              <Text style={d.sub}>  Isc diseño: {resultados.protecciones.iDisenoCC}A  (Isc × 1.56)</Text>
+              <Text style={d.sub}>  Fusible: {resultados.protecciones.fusibleCC}A</Text>
               <Text style={d.sub}>  Conductor: {resultados.protecciones.cableCC}</Text>
               <Text style={[s.secLabel, d.text, { marginTop:12 }]}>Protecciones CA</Text>
-              <Text style={d.sub}>  Corriente diseño: {resultados.protecciones.iDisenoCA}A  (Iac × 1.25)</Text>
+              <Text style={d.sub}>  Iac diseño: {resultados.protecciones.iDisenoCA}A  (Iac × 1.25)</Text>
               <Text style={d.sub}>  Termomag: {resultados.protecciones.pastillaCA}A</Text>
               <Text style={d.sub}>  Conductor: {resultados.protecciones.cableCA}</Text>
 
@@ -425,7 +401,7 @@ export default function ProCalculator() {
         </View>
       </ScrollView>
 
-      {/* ═══ Modal Paneles ═══ */}
+      {/* Modal Paneles */}
       <Modal visible={modalPaneles} animationType="slide" transparent onRequestClose={() => setModalPaneles(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
@@ -456,7 +432,7 @@ export default function ProCalculator() {
         </View>
       </Modal>
 
-      {/* ═══ Modal Tipo de Suministro ═══ */}
+      {/* Modal Tipo Suministro */}
       <Modal visible={modalFases} animationType="slide" transparent onRequestClose={() => setModalFases(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
@@ -467,30 +443,22 @@ export default function ProCalculator() {
             {opcionesFases.map((op, idx) => (
               <TouchableOpacity key={idx} style={[s.listItem, {
                 borderColor: tipoConexion.tarifa === op.tarifa ? '#10B981' : (isDark?'#334155':'#E2E8F0'),
-                backgroundColor: tipoConexion.tarifa === op.tarifa
-                  ? 'rgba(16,185,129,0.08)' : (isDark?'#0F172A':'#F8FAFC')
+                backgroundColor: tipoConexion.tarifa === op.tarifa ? 'rgba(16,185,129,0.08)' : (isDark?'#0F172A':'#F8FAFC')
               }]} onPress={() => { setTipoConexion(op); setModalFases(false); }}>
-                <Ionicons
-                  name={op.fases === 1 ? 'home' : 'flash'}
-                  size={22}
-                  color={op.fases === 1 ? '#10B981' : '#F59E0B'}
-                  style={{ marginRight:12 }}
-                />
+                <Ionicons name={op.fases === 1 ? 'home' : 'flash'} size={22}
+                  color={op.fases === 1 ? '#10B981' : '#F59E0B'} style={{ marginRight:12 }} />
                 <View style={{ flex:1 }}>
-                  <Text style={[d.text, { fontWeight:'bold' }]}>
-                    {op.fases === 1 ? 'Monofásico' : 'Trifásico'} {op.voltajeAC}V
-                  </Text>
+                  <Text style={[d.text, { fontWeight:'bold' }]}>{op.fases === 1 ? 'Monofásico' : 'Trifásico'} {op.voltajeAC}V</Text>
                   <Text style={d.sub}>{op.descripcion}</Text>
                 </View>
-                {tipoConexion.tarifa === op.tarifa &&
-                  <Ionicons name="checkmark-circle" size={22} color="#10B981" />}
+                {tipoConexion.tarifa === op.tarifa && <Ionicons name="checkmark-circle" size={22} color="#10B981" />}
               </TouchableOpacity>
             ))}
           </View>
         </View>
       </Modal>
 
-      {/* ═══ Modal Inversores Compatibles ═══ */}
+      {/* Modal Inversores Compatibles */}
       <Modal visible={modalInversores} animationType="slide" transparent onRequestClose={() => setModalInversores(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
@@ -523,7 +491,7 @@ export default function ProCalculator() {
   );
 }
 
-// ─── Mini-componentes ──────────────────────────────────────────────────────
+// ─ Mini-componentes ────────────────────────────────────────────────────────────
 const Divider = () => <View style={{ height:1, backgroundColor:'#CBD5E1', marginVertical:14 }} />;
 
 const Chip = ({ icon, color, num, label }: any) => (
@@ -567,7 +535,6 @@ const ModalHeader = ({ title, onClose, d }: any) => (
   </View>
 );
 
-// ─── Estilos ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   container:     { padding:20, paddingBottom:50 },
   title:         { fontSize:20, fontWeight:'bold', marginBottom:12 },
