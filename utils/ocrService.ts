@@ -1,5 +1,10 @@
 // utils/ocrService.ts
 
+interface Bimestre {
+  periodo: string;
+  kwh: number;
+}
+
 export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mimeType: string) => {
   try {
     const formData = new FormData();
@@ -23,59 +28,65 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
     // 1. Extraer nombre del cliente
     let cliente = "";
     const lineas = textoCompleto.split("\n");
-    const indiceCFE = lineas.findIndex(l => l.toUpperCase().includes("FEDERAL DE ELECTRICIDAD"));
+    const indiceCFE = lineas.findIndex((l: string) => l.toUpperCase().includes("FEDERAL DE ELECTRICIDAD"));
     if (indiceCFE !== -1 && lineas[indiceCFE + 1]) {
       cliente = lineas[indiceCFE + 1].trim();
     }
 
-    // 2. Extraer historial de consumos - formato CFE real:
+    // 2. Historial de consumos - formato CFE real:
     // "del 05 DIC 25 al 05 FEB 26  683  $1,879.00  $1,879.00"
-    const regexHistorialCFE = /del\s+\d{1,2}\s+\w+\s+\d{2}\s+al\s+\d{1,2}\s+\w+\s+\d{2}\s+([\d,]+)\s+\$/gi;
+    const regexHistorialCFE = /del\s+(\d{1,2}\s+\w+\s+\d{2})\s+al\s+(\d{1,2}\s+\w+\s+\d{2})\s+([\d,]+)\s+\$/gi;
     let matchH;
-    const consumosBimestrales: number[] = [];
+    const bimestres: Bimestre[] = [];
+
     while ((matchH = regexHistorialCFE.exec(textoCompleto)) !== null) {
-      const kWh = parseInt(matchH[1].replace(/,/g, ""), 10);
+      const kwh = parseInt(matchH[3].replace(/,/g, ""), 10);
       // Filtro: valores razonables entre 50 y 9999 kWh bimestrales
-      if (kWh >= 50 && kWh <= 9999) consumosBimestrales.push(kWh);
+      if (kwh >= 50 && kwh <= 9999) {
+        bimestres.push({
+          periodo: `${matchH[1].trim()} - ${matchH[2].trim()}`,
+          kwh,
+        });
+      }
     }
 
     let consumo: string | null = null;
     let mensaje = "";
 
-    if (consumosBimestrales.length >= 2) {
-      // Promediar los ultimos bimestres y dividir entre 2 para obtener mensual
-      const ultimos = consumosBimestrales.slice(0, Math.min(consumosBimestrales.length, 6));
-      const suma = ultimos.reduce((a, b) => a + b, 0);
+    if (bimestres.length >= 2) {
+      const ultimos = bimestres.slice(0, Math.min(bimestres.length, 6));
+      const suma = ultimos.reduce((a, b) => a + b.kwh, 0);
       const promedioMensual = Math.round(suma / (ultimos.length * 2));
       consumo = String(promedioMensual);
-      mensaje = `Promedio de ${ultimos.length} bimestres detectados.`;
+      mensaje = `Promedio de ${ultimos.length} bimestres detectados`;
     } else {
-      // Fallback 1: Leer consumo del periodo actual desde la tabla de energia
-      // Formato: "Energia (kWh)   15,370   14,439   931"
+      // Fallback 1: tabla de energia del periodo actual
+      // "Energia (kWh)   15,370   14,439   931"
       const regexEnergiaPeriodo = /Energ[i\u00ed]a\s*\(kWh\)\s+[\d,]+\s+[\d,]+\s+([\d,]+)/i;
       const matchEnergia = textoCompleto.match(regexEnergiaPeriodo);
       if (matchEnergia) {
         const consumoBimestral = parseInt(matchEnergia[1].replace(/,/g, ""), 10);
         consumo = String(Math.round(consumoBimestral / 2));
-        mensaje = "Solo se detecto el ultimo periodo. (Considera un error por estacionalidad).";
+        mensaje = "Lectura del periodo actual (estimacion bimestral / 2)";
       } else {
-        // Fallback 2: Buscar el total del periodo directamente
+        // Fallback 2
         const regexPeriodoTotal = /Total\s+periodo[^\d]*([\d,]+)\s*kWh/i;
         const matchTotal = textoCompleto.match(regexPeriodoTotal);
         if (matchTotal) {
           const consumoBimestral = parseInt(matchTotal[1].replace(/,/g, ""), 10);
           consumo = String(Math.round(consumoBimestral / 2));
-          mensaje = "Consumo extraido del total del periodo.";
+          mensaje = "Consumo extraido del total del periodo";
         }
       }
     }
 
     return {
       exito: true,
-      consumo,           // nombre correcto que espera index.tsx
-      consumoPromedio: consumo ? parseInt(consumo) : null,  // compatibilidad
+      consumo,
+      consumoPromedio: consumo ? parseInt(consumo) : null,
       cliente,
       mensaje,
+      bimestres,          // array detallado: [{ periodo, kwh }, ...]
       textoBruto: textoCompleto,
     };
 
