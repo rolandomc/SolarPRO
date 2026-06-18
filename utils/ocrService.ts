@@ -5,30 +5,32 @@ interface Bimestre {
   kwh: number;
 }
 
-// Limpia el nombre del cliente extrayendo solo el nombre de persona
 const limpiarNombreCliente = (raw: string): string => {
   if (!raw || raw.trim().length === 0) return "";
 
   const cortadores = [
     "TOTAL", "PAGAR", "RFC", "TARIFA", "MEDIDOR", "CUENTA",
-    "SERVICIO", "CFE", "LIMITE", "CORTE", "VASCO", "FRACC",
-    "COL.", "AV.", "CALLE", "CP.", "C.P.", "NO.", "#",
-    "DESCARGA", "PERIODO", "IMPORTE",
+    "SERVICIO", "CFE", "LIMITE", "CORTE", "FRACC",
+    "COL ", "AV ", "CALLE", "NO.", "NUM", "KWH",
+    "DESCARGA", "PERIODO", "IMPORTE", "BIMEST", "$", ":",
   ];
 
   let texto = raw.trim();
 
+  // Encontrar la posicion mas temprana de cualquier cortador
+  let corteMasProximo = texto.length;
   for (const corte of cortadores) {
     const idx = texto.toUpperCase().indexOf(corte);
-    if (idx > 0) {
-      texto = texto.substring(0, idx).trim();
+    if (idx > 0 && idx < corteMasProximo) {
+      corteMasProximo = idx;
     }
   }
+  texto = texto.substring(0, corteMasProximo).trim();
 
-  // Eliminar RFC alfanumerico (3-4 letras + 6 digitos + 2-3 chars) -- FIX: {2,3} no {3,2}
+  // Eliminar RFC (letras + digitos)
   texto = texto.replace(/[A-Z]{3,4}\d{6}[A-Z0-9]{2,3}/gi, "");
 
-  // Eliminar numeros y caracteres que no sean letras o espacios
+  // Solo letras y espacios (incluye acentos y enye)
   texto = texto.replace(/[^a-zA-Z\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da\u00f1\u00d1\s]/g, "").trim();
 
   // Limpiar espacios multiples
@@ -61,11 +63,11 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
     const textoCompleto = data.ParsedResults.map((page: any) => page.ParsedText).join("\n");
     const lineas = textoCompleto.split("\n");
 
-    // 1. Extraer y limpiar nombre del cliente
+    // 1. Nombre del cliente
     let cliente = "";
     const indiceCFE = lineas.findIndex((l: string) => l.toUpperCase().includes("FEDERAL DE ELECTRICIDAD"));
     if (indiceCFE !== -1) {
-      for (let i = indiceCFE + 1; i < Math.min(indiceCFE + 6, lineas.length); i++) {
+      for (let i = indiceCFE + 1; i < Math.min(indiceCFE + 8, lineas.length); i++) {
         const candidato = limpiarNombreCliente(lineas[i]);
         if (candidato.length > 4) {
           cliente = candidato;
@@ -74,8 +76,7 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
       }
     }
 
-    // 2. Historial de consumos - formato CFE:
-    // "del 05 DIC 25 al 05 FEB 26  683  $1,879.00"
+    // 2. Historial bimestral CFE
     const regexHistorialCFE = /del\s+(\d{1,2}\s+\w+\s+\d{2})\s+al\s+(\d{1,2}\s+\w+\s+\d{2})\s+([\d,]+)\s+\$/gi;
     let matchH;
     const bimestres: Bimestre[] = [];
@@ -83,10 +84,7 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
     while ((matchH = regexHistorialCFE.exec(textoCompleto)) !== null) {
       const kwh = parseInt(matchH[3].replace(/,/g, ""), 10);
       if (kwh >= 50 && kwh <= 9999) {
-        bimestres.push({
-          periodo: `${matchH[1].trim()} - ${matchH[2].trim()}`,
-          kwh,
-        });
+        bimestres.push({ periodo: `${matchH[1].trim()} - ${matchH[2].trim()}`, kwh });
       }
     }
 
@@ -103,29 +101,19 @@ export const procesarDocumentoOCR = async (fileUri: string, fileName: string, mi
       const regexEnergiaPeriodo = /Energ[i\u00ed]a\s*\(kWh\)\s+[\d,]+\s+[\d,]+\s+([\d,]+)/i;
       const matchEnergia = textoCompleto.match(regexEnergiaPeriodo);
       if (matchEnergia) {
-        const consumoBimestral = parseInt(matchEnergia[1].replace(/,/g, ""), 10);
-        consumo = String(Math.round(consumoBimestral / 2));
-        mensaje = "Lectura del periodo actual (estimacion bimestral / 2)";
+        consumo = String(Math.round(parseInt(matchEnergia[1].replace(/,/g, ""), 10) / 2));
+        mensaje = "Lectura del periodo actual";
       } else {
         const regexPeriodoTotal = /Total\s+periodo[^\d]*([\d,]+)\s*kWh/i;
         const matchTotal = textoCompleto.match(regexPeriodoTotal);
         if (matchTotal) {
-          const consumoBimestral = parseInt(matchTotal[1].replace(/,/g, ""), 10);
-          consumo = String(Math.round(consumoBimestral / 2));
+          consumo = String(Math.round(parseInt(matchTotal[1].replace(/,/g, ""), 10) / 2));
           mensaje = "Consumo extraido del total del periodo";
         }
       }
     }
 
-    return {
-      exito: true,
-      consumo,
-      consumoPromedio: consumo ? parseInt(consumo) : null,
-      cliente,
-      mensaje,
-      bimestres,
-      textoBruto: textoCompleto,
-    };
+    return { exito: true, consumo, consumoPromedio: consumo ? parseInt(consumo) : null, cliente, mensaje, bimestres, textoBruto: textoCompleto };
 
   } catch (error) {
     return { exito: false, error: (error as Error).message };
