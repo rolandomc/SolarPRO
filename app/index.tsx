@@ -59,6 +59,18 @@ export default function Index() {
     ? parseFloat(tarifaManual) || 0
     : tarifaActiva.tarifa;
 
+  // ✅ Limpiar todos los campos
+  const limpiarTodo = () => {
+    setCliente('');
+    setConsumoMensual('');
+    setPotenciaPanel('');
+    setPorcentajeAhorro('100');
+    setTarifaKey('1F');
+    setTarifaManual('');
+    setResultados(null);
+    setDatosOCR(null);
+  };
+
   const d = {
     bg:    { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' },
     text:  { color: isDark ? '#F1F5F9' : '#0F172A' },
@@ -177,10 +189,22 @@ export default function Index() {
             <Text style={[s.headerTitle, d.text]}>Calculadora Solar</Text>
             <Text style={[s.headerSub, d.sub]}>Estimación rápida</Text>
           </View>
-          <TouchableOpacity style={s.scanBtn} onPress={escanearRecibo}>
-            <Ionicons name="document-attach" size={20} color="#FFF" />
-            <Text style={s.scanTxt}>Recibo CFE</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {/* ✅ Botón limpiar — solo visible si hay datos */}
+            {(resultados || cliente || consumoMensual) && (
+              <TouchableOpacity
+                style={[s.clearBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
+                onPress={limpiarTodo}
+              >
+                <Ionicons name="refresh" size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+                <Text style={[s.clearTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nuevo</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={s.scanBtn} onPress={escanearRecibo}>
+              <Ionicons name="document-attach" size={20} color="#FFF" />
+              <Text style={s.scanTxt}>Recibo CFE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Tarjeta OCR */}
@@ -376,6 +400,15 @@ export default function Index() {
                 <Text style={s.ctaTxt}>Refinar en PRO</Text>
               </TouchableOpacity>
             </View>
+
+            {/* ✅ Botón limpiar — al pie de los resultados */}
+            <TouchableOpacity
+              style={[s.newQuoteBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
+              onPress={limpiarTodo}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+              <Text style={[s.newQuoteTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nueva cotización</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -395,7 +428,6 @@ export default function Index() {
         <View style={{ height: 32 }} />
       </ScrollView>
 
-      {/* ✅ Loading overlay OCR */}
       <LoadingOverlay
         visible={loading}
         mensaje={loadingMsg}
@@ -433,6 +465,8 @@ const s = StyleSheet.create({
   header:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   headerTitle:   { fontSize: 22, fontWeight: 'bold' },
   headerSub:     { fontSize: 13, marginTop: 2 },
+  clearBtn:      { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
+  clearTxt:      { fontSize: 12, fontWeight: '600' },
   scanBtn:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   scanTxt:       { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 13 },
   card:          { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 12 },
@@ -452,7 +486,4 @@ const s = StyleSheet.create({
   roiBadge:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   ctaRow:        { flexDirection: 'row', gap: 10, marginTop: 8 },
   ctaBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, gap: 8 },
-  ctaTxt:        { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  proBanner:     { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 4 },
-  proBannerIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(245,158,11,0.12)', justifyContent: 'center', alignItems: 'center' },
-});
+  ctaTxt:
