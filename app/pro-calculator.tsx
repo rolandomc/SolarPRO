@@ -28,10 +28,6 @@ const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   return INVERSORES_DB.reduce((p, c) => c.max_dc_input > p.max_dc_input ? c : p);
 };
 
-// Tarifas CFE México → precio kWh referencia 2025 (promedio ponderado por bloque)
-// DAC/Residencial: ~$2.85/kWh promedio real incluyendo cargos fijos
-// General BT (tarifa 2): ~$3.20/kWh
-// Industrial HM/MT: ~$1.80/kWh
 const PRECIO_KWH_POR_TARIFA: Record<string, number> = {
   'Residencial': 2.85,
   'DAC':         2.85,
@@ -51,28 +47,23 @@ const calcularROI = (
   consumoMensualKwh: number,
   costoTotal: number,
   tarifa: string,
-  potenciaKWp: number,
+  potenciaKWp: number,   // ← se agrega al objeto de retorno
 ) => {
-  // Precio kWh según tarifa detectada del recibo
-  const precioKwh = PRECIO_KWH_POR_TARIFA[tarifa] ?? 2.85;
-
-  // El sistema genera ~85% del consumo (factor de rendimiento y autoconsumo real)
-  const kwGeneradosMes   = potenciaKWp * 4.5 * 30 * 0.80; // HSP prom 4.5h, PR 80%
+  const precioKwh        = PRECIO_KWH_POR_TARIFA[tarifa] ?? 2.85;
+  const kwGeneradosMes   = potenciaKWp * 4.5 * 30 * 0.80;
   const kwhAhorroDirecto = Math.min(consumoMensualKwh, kwGeneradosMes);
-
   const ahorroMensual    = Math.round(kwhAhorroDirecto * precioKwh);
   const ahorroBimestral  = ahorroMensual * 2;
   const ahorroAnual      = ahorroMensual * 12;
   const roiMeses         = Math.round(costoTotal / ahorroMensual);
   const roiAnos          = (roiMeses / 12).toFixed(1);
-
-  // Proyección 25 años (vida útil paneles)
   const ahorroTotal25    = ahorroAnual * 25;
   const gananciaTotal25  = ahorroTotal25 - costoTotal;
 
   return {
+    potenciaKWp,          // ← NUEVO: guardado para estadística de historial
     precioKwh,
-    kwGeneradosMes:   Math.round(kwGeneradosMes),
+    kwGeneradosMes:  Math.round(kwGeneradosMes),
     ahorroMensual,
     ahorroBimestral,
     ahorroAnual,
@@ -111,7 +102,6 @@ export default function ProCalculator() {
     { tarifa: 'HM / MT',     fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F', voltajeAC: 380 },
   ];
 
-  // ─ Acciones ──────────────────────────────────────────────────────────────
   const escanearPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
@@ -123,7 +113,6 @@ export default function ProCalculator() {
           if (r.consumo)  setConsumo(r.consumo);
           if (r.cliente)  setCliente(r.cliente);
           if (r.tipoConexion) {
-            // ─ AUTO: tarifa + fases detectados del recibo ─
             setTipoConexion(r.tipoConexion);
             Alert.alert(
               '✅ Recibo analizado',
@@ -301,7 +290,6 @@ export default function ProCalculator() {
             </TouchableOpacity>
           </View>
 
-          {/* RESULTADOS */}
           {resultados && st && (
             <View style={[s.card, d.card, { marginTop:20 }]}>
               <Text style={[s.title, { color:'#10B981' }]}>Memoria de Cálculo</Text>
@@ -422,7 +410,6 @@ export default function ProCalculator() {
                 <Text style={{ fontWeight:'bold', fontSize:18, color:'#10B981' }}>${resultados.costoTotal.toLocaleString()}</Text>
               </View>
 
-              {/* ─── PREVIEW ROI ────────────────────────────────────── */}
               {resultados.roi && (
                 <View style={[s.roiPreview, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
                   <View style={{ flexDirection:'row', alignItems:'center', marginBottom:8 }}>
@@ -542,7 +529,6 @@ export default function ProCalculator() {
   );
 }
 
-// ─ Mini-componentes ──────────────────────────────────────────────────────────
 const Divider = () => <View style={{ height:1, backgroundColor:'#CBD5E1', marginVertical:14 }} />;
 
 const Chip = ({ icon, color, num, label }: any) => (

@@ -37,28 +37,24 @@ export default function History() {
   const { isDark } = useContext(ThemeContext);
   const router     = useRouter();
 
-  const [lista, setLista]             = useState<Cotizacion[]>([]);
-  const [busqueda, setBusqueda]       = useState('');
+  const [lista, setLista]               = useState<Cotizacion[]>([]);
+  const [busqueda, setBusqueda]         = useState('');
   const [filtroEstado, setFiltroEstado] = useState<Estado | 'todos'>('todos');
-  const [modalCot, setModalCot]       = useState<Cotizacion | null>(null);
-  const [notaTemp, setNotaTemp]       = useState('');
+  const [modalCot, setModalCot]         = useState<Cotizacion | null>(null);
+  const [notaTemp, setNotaTemp]         = useState('');
 
-  // Recarga cada vez que el tab recibe foco
   useFocusEffect(
-    useCallback(() => {
-      cargarHistorial();
-    }, [])
+    useCallback(() => { cargarHistorial(); }, [])
   );
 
   const cargarHistorial = async () => {
     try {
       const data = await AsyncStorage.getItem('historialCotizaciones');
-      if (data) setLista(JSON.parse(data).reverse()); // más reciente primero
+      if (data) setLista(JSON.parse(data).reverse());
     } catch {}
   };
 
   const guardarHistorial = async (nuevo: Cotizacion[]) => {
-    // guardar en orden original (sin reverse)
     await AsyncStorage.setItem('historialCotizaciones', JSON.stringify([...nuevo].reverse()));
     setLista(nuevo);
   };
@@ -102,30 +98,25 @@ export default function History() {
     router.push({ pathname: '/quotes', params: { editId: cot.id } });
   };
 
-  // ─ Filtros ─────────────────────────────────────────────────────────────
   const listaFiltrada = lista.filter(c => {
     const coincideBusqueda = c.cliente.toLowerCase().includes(busqueda.toLowerCase());
     const coincideEstado   = filtroEstado === 'todos' || (c.estado || 'cotizado') === filtroEstado;
     return coincideBusqueda && coincideEstado;
   });
 
-  // ─ Estadisticas ─────────────────────────────────────────────────────────
+  // ─ Estadísticas ─────────────────────────────────────────────────────────
   const totalInstalado = lista
     .filter(c => c.estado === 'instalado')
     .reduce((s, c) => s + c.total, 0);
+
   const totalVendido = lista
     .filter(c => c.estado === 'aprobado' || c.estado === 'instalado')
     .reduce((s, c) => s + c.total, 0);
+
+  // Lee potenciaKWp directo del objeto roi (guardado desde pro-calculator)
   const kwInstalados = lista
-    .filter(c => c.estado === 'instalado')
-    .reduce((s, c) => {
-      const item = c.items?.find((i: any) => i.descripcion?.toLowerCase().includes('instalacion'));
-      if (item) {
-        const match = item.descripcion.match(/([\d.]+)\s*kwp/i);
-        return s + (match ? parseFloat(match[1]) : 0);
-      }
-      return s;
-    }, 0);
+    .filter(c => c.estado === 'instalado' && c.roi?.potenciaKWp)
+    .reduce((s, c) => s + (c.roi.potenciaKWp as number), 0);
 
   const d = {
     bg:    { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' },
@@ -149,6 +140,7 @@ export default function History() {
           <Text style={[d.sub, { fontSize: 12, marginTop: 2 }]}>{item.fecha}</Text>
           {item.roi && (
             <Text style={[d.sub, { fontSize: 12 }]}>
+              {item.roi.potenciaKWp ? `${item.roi.potenciaKWp.toFixed(2)} kWp  •  ` : ''}
               ROI: {item.roi.roiMeses} meses  •  Ahorro: ${item.roi.ahorroAnual?.toLocaleString()}/año
             </Text>
           )}
@@ -171,17 +163,16 @@ export default function History() {
   return (
     <SafeAreaView style={[{ flex: 1 }, d.bg]} edges={['top', 'left', 'right']}>
 
-      {/* Header */}
       <View style={[h.header, d.bg]}>
         <Text style={[h.title, d.text]}>Historial de Proyectos</Text>
         <Text style={[d.sub, { fontSize: 13 }]}>{lista.length} cotizaciones</Text>
       </View>
 
-      {/* Tarjetas de estadísticas */}
+      {/* Estadísticas */}
       <View style={h.statsRow}>
-        <StatCard label="Instalado" valor={`$${Math.round(totalInstalado/1000)}k`} color="#10B981" icon="sunny" d={d} />
-        <StatCard label="Aprobado" valor={`$${Math.round(totalVendido/1000)}k`}    color="#F59E0B" icon="checkmark-circle" d={d} />
-        <StatCard label="kWp inst." valor={kwInstalados.toFixed(1)}                color="#0EA5E9" icon="flash"           d={d} />
+        <StatCard label="Instalado"  valor={`$${Math.round(totalInstalado/1000)}k`} color="#10B981" icon="sunny"           d={d} />
+        <StatCard label="Aprobado"   valor={`$${Math.round(totalVendido/1000)}k`}   color="#F59E0B" icon="checkmark-circle" d={d} />
+        <StatCard label="kWp inst."  valor={kwInstalados.toFixed(1)}                color="#0EA5E9" icon="flash"            d={d} />
       </View>
 
       {/* Búsqueda */}
@@ -201,13 +192,15 @@ export default function History() {
         )}
       </View>
 
-      {/* Filtros de estado */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={h.filtrosScroll} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+      {/* Filtros */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={h.filtrosScroll}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}>
         <TouchableOpacity
           style={[h.filtroBadge, filtroEstado === 'todos' && { backgroundColor: '#334155' }]}
           onPress={() => setFiltroEstado('todos')}
         >
-          <Text style={[{ fontSize: 13, fontWeight: 'bold' }, { color: filtroEstado === 'todos' ? '#FFF' : (isDark ? '#94A3B8' : '#64748B') }]}>Todos</Text>
+          <Text style={[{ fontSize: 13, fontWeight: 'bold' },
+            { color: filtroEstado === 'todos' ? '#FFF' : (isDark ? '#94A3B8' : '#64748B') }]}>Todos</Text>
         </TouchableOpacity>
         {ESTADOS.map(e => (
           <TouchableOpacity
@@ -222,7 +215,6 @@ export default function History() {
         ))}
       </ScrollView>
 
-      {/* Lista */}
       {listaFiltrada.length === 0 ? (
         <View style={h.empty}>
           <Ionicons name="folder-open-outline" size={64} color={isDark ? '#334155' : '#CBD5E1'} />
@@ -242,13 +234,12 @@ export default function History() {
         />
       )}
 
-      {/* ── Modal detalle ─────────────────────────────────────────────── */}
+      {/* Modal detalle */}
       <Modal visible={!!modalCot} animationType="slide" transparent onRequestClose={() => setModalCot(null)}>
         <View style={h.modalOverlay}>
           <View style={[h.modalBox, d.modal]}>
             <ScrollView showsVerticalScrollIndicator={false}>
 
-              {/* Cabecera modal */}
               <View style={h.modalHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={[d.text, { fontWeight: 'bold', fontSize: 18 }]}>{modalCot?.cliente}</Text>
@@ -259,15 +250,18 @@ export default function History() {
                 </TouchableOpacity>
               </View>
 
-              {/* Total */}
               <View style={[h.totalBox, { borderColor: '#10B981' }]}>
                 <Text style={[d.sub, { fontSize: 13 }]}>Total del sistema</Text>
                 <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#10B981' }}>
                   ${modalCot?.total.toLocaleString()}
                 </Text>
+                {modalCot?.roi?.potenciaKWp && (
+                  <Text style={[d.sub, { fontSize: 13, marginTop: 4 }]}>
+                    {modalCot.roi.potenciaKWp.toFixed(2)} kWp instalados
+                  </Text>
+                )}
               </View>
 
-              {/* Cambiar estado */}
               <Text style={[d.text, { fontWeight: 'bold', fontSize: 14, marginBottom: 8, marginTop: 4 }]}>Estado del proyecto</Text>
               <View style={h.estadosGrid}>
                 {ESTADOS.map(e => {
@@ -290,7 +284,6 @@ export default function History() {
                 })}
               </View>
 
-              {/* Items */}
               <Text style={[d.text, { fontWeight: 'bold', fontSize: 14, marginBottom: 8, marginTop: 16 }]}>Componentes</Text>
               {modalCot?.items.map((item: any, i: number) => (
                 <View key={i} style={[h.itemDetalle, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
@@ -302,21 +295,17 @@ export default function History() {
                 </View>
               ))}
 
-              {/* ROI resumen */}
               {modalCot?.roi && (
                 <View style={[h.roiResumen, { borderColor: '#10B981', backgroundColor: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }]}>
-                  <Text style={[d.text, { fontWeight: 'bold', fontSize: 13, marginBottom: 8 }]}>
-                    Retorno de Inversión
-                  </Text>
+                  <Text style={[d.text, { fontWeight: 'bold', fontSize: 13, marginBottom: 8 }]}>Retorno de Inversión</Text>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <RoiMini label="Ahorro/mes"   valor={`$${modalCot.roi.ahorroMensual?.toLocaleString()}`}   color="#10B981" />
-                    <RoiMini label="Recuperación" valor={`${modalCot.roi.roiMeses} meses`}                     color="#0EA5E9" />
-                    <RoiMini label="Ganancia 25a" valor={`$${Math.round(modalCot.roi.gananciaTotal25/1000)}k`}  color="#F59E0B" />
+                    <RoiMini label="Ahorro/mes"   valor={`$${modalCot.roi.ahorroMensual?.toLocaleString()}`}  color="#10B981" />
+                    <RoiMini label="Recuperación" valor={`${modalCot.roi.roiMeses} meses`}                    color="#0EA5E9" />
+                    <RoiMini label="Ganancia 25a" valor={`$${Math.round(modalCot.roi.gananciaTotal25/1000)}k`} color="#F59E0B" />
                   </View>
                 </View>
               )}
 
-              {/* Notas */}
               <Text style={[d.text, { fontWeight: 'bold', fontSize: 14, marginBottom: 8, marginTop: 16 }]}>Notas internas</Text>
               <TextInput
                 style={[h.notasInput, d.input]}
@@ -331,7 +320,6 @@ export default function History() {
                 <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Guardar nota</Text>
               </TouchableOpacity>
 
-              {/* Acciones */}
               <View style={h.accionesRow}>
                 <TouchableOpacity style={[h.accionBtn, { backgroundColor: '#0EA5E9' }]} onPress={() => regenaerPDF(modalCot!)}>
                   <Ionicons name="document-text-outline" size={20} color="#FFF" />
@@ -352,12 +340,10 @@ export default function History() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
 
-// ─ Mini-componentes ──────────────────────────────────────────────────────────
 const StatCard = ({ label, valor, color, icon, d }: any) => (
   <View style={[h.statCard, d.card]}>
     <Ionicons name={icon} size={22} color={color} />
@@ -374,28 +360,28 @@ const RoiMini = ({ label, valor, color }: any) => (
 );
 
 const h = StyleSheet.create({
-  header:       { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  title:        { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
-  statsRow:     { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
-  statCard:     { flex: 1, alignItems: 'center', borderRadius: 10, borderWidth: 1, padding: 12, marginHorizontal: 4 },
-  searchBox:    { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 },
-  filtrosScroll:{ maxHeight: 52 },
-  filtroBadge:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#334155', marginRight: 8 },
-  empty:        { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  itemCard:     { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
-  estadoBadge:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  modalBox:     { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '92%' },
-  modalHeader:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  totalBox:     { borderWidth: 1.5, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
-  estadosGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  estadoBtn:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  itemDetalle:  { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 8 },
-  roiResumen:   { borderWidth: 1.5, borderRadius: 10, padding: 14, marginTop: 16 },
-  notasInput:   { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 10 },
+  header:        { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  title:         { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
+  statsRow:      { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
+  statCard:      { flex: 1, alignItems: 'center', borderRadius: 10, borderWidth: 1, padding: 12, marginHorizontal: 4 },
+  searchBox:     { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 },
+  filtrosScroll: { maxHeight: 52 },
+  filtroBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#334155', marginRight: 8 },
+  empty:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  itemCard:      { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  estadoBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
+  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  modalBox:      { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '92%' },
+  modalHeader:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  totalBox:      { borderWidth: 1.5, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
+  estadosGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  estadoBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  itemDetalle:   { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 8 },
+  roiResumen:    { borderWidth: 1.5, borderRadius: 10, padding: 14, marginTop: 16 },
+  notasInput:    { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 10 },
   guardarNotaBtn:{ backgroundColor: '#334155', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
-  accionesRow:  { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  accionBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10 },
-  accionTxt:    { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 14 },
-  eliminarBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#EF4444', marginBottom: 8 },
+  accionesRow:   { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  accionBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10 },
+  accionTxt:     { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 14 },
+  eliminarBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#EF4444', marginBottom: 8 },
 });
