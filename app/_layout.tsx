@@ -70,6 +70,13 @@ export default function RootLayout() {
           }}
         />
         <Tabs.Screen
+          name="dashboard"
+          options={{
+            title: "Dashboard",
+            tabBarIcon: ({ color }) => <Ionicons name="bar-chart" size={24} color={color} />,
+          }}
+        />
+        <Tabs.Screen
           name="quotes"
           options={{
             title: "Cotizar",
