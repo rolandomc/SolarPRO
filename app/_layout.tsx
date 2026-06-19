@@ -41,9 +41,9 @@ export default function RootLayout() {
     themePreference === "dark" ||
     (themePreference === "system" && systemScheme === "dark");
 
-  const activeTint = isDark ? "#38BDF8" : "#0EA5E9";
+  const activeTint   = isDark ? "#38BDF8" : "#0EA5E9";
   const inactiveTint = isDark ? "#475569" : "#94A3B8";
-  const tabBarBg = isDark ? "#0F172A" : "#FFFFFF";
+  const tabBarBg     = isDark ? "#0F172A" : "#FFFFFF";
 
   return (
     <ThemeContext.Provider value={{ themePreference, setThemePreference, isDark }}>
@@ -58,14 +58,14 @@ export default function RootLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: "Basica",
+            title: "Básica",
             tabBarIcon: ({ color }) => <Ionicons name="calculator" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
           name="pro-calculator"
           options={{
-            title: "Ingenieria PRO",
+            title: "PRO",
             tabBarIcon: ({ color }) => <Ionicons name="flash" size={24} color={color} />,
           }}
         />
@@ -74,6 +74,13 @@ export default function RootLayout() {
           options={{
             title: "Cotizar",
             tabBarIcon: ({ color }) => <Ionicons name="document-text" size={24} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: "Historial",
+            tabBarIcon: ({ color }) => <Ionicons name="time" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
