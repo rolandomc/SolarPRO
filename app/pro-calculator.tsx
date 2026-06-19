@@ -36,11 +36,12 @@ export default function ProCalculator() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const [cliente, setCliente]       = useState('');
-  const [consumo, setConsumo]       = useState('');
-  const [hsp, setHsp]               = useState('');
-  const [hspMeta, setHspMeta]       = useState<any>(null);
-  const [panelSelId, setPanelSelId] = useState(PANELES_DB[0].id);
+  const [cliente, setCliente]           = useState('');
+  const [consumo, setConsumo]           = useState('');
+  const [hsp, setHsp]                   = useState('');
+  const [hspMeta, setHspMeta]           = useState<any>(null);
+  const [panelSelId, setPanelSelId]     = useState(PANELES_DB[0].id);
+  const [mostrarBanner, setMostrarBanner] = useState(false);
   const [tipoConexion, setTipoConexion] = useState<TipoConexion>({
     tarifa: 'Residencial', fases: 1,
     descripcion: 'Residencial — 220V bifásico L1-L2-N', voltajeAC: 220,
@@ -56,8 +57,8 @@ export default function ProCalculator() {
   const [loadingSubMsg, setLoadingSubMsg] = useState('');
 
   useEffect(() => {
-    if (params.consumoParam) setConsumo(String(params.consumoParam));
-    if (params.clienteParam) setCliente(String(params.clienteParam));
+    if (params.consumoParam) { setConsumo(String(params.consumoParam)); setMostrarBanner(true); }
+    if (params.clienteParam) { setCliente(String(params.clienteParam)); setMostrarBanner(true); }
   }, [params.consumoParam, params.clienteParam]);
 
   const panelSel = PANELES_DB.find(p => p.id === panelSelId) || PANELES_DB[0];
@@ -78,6 +79,7 @@ export default function ProCalculator() {
     setTipoConexion({ tarifa: 'Residencial', fases: 1, descripcion: 'Residencial — 220V bifásico L1-L2-N', voltajeAC: 220 });
     setResultados(null);
     setInversoresCompatibles([]);
+    setMostrarBanner(false); // <-- ocultar banner al iniciar nueva cotización
   };
 
   const escanearPDF = async () => {
@@ -241,19 +243,16 @@ export default function ProCalculator() {
       <ScrollView style={d.bg}>
         <View style={s.container}>
 
-          {/* Header con botón Recibo CFE */}
+          {/* Header — solo título */}
           <View style={s.proHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[s.title, d.text, { marginBottom: 2 }]}>Dimensionamiento Profesional</Text>
               <Text style={[{ fontSize: 12 }, d.sub]}>NOM-001-SEDE-2012 · NMX-J-680-ANCE-2014</Text>
             </View>
-            <TouchableOpacity style={s.scanBtn} onPress={escanearPDF}>
-              <Ionicons name="document-attach" size={18} color="#FFF" />
-              <Text style={s.scanTxt}>Recibo CFE</Text>
-            </TouchableOpacity>
           </View>
 
-          {(params.consumoParam || params.clienteParam) && (
+          {/* Banner datos precargados — se oculta al hacer nueva cotización */}
+          {mostrarBanner && (
             <View style={[s.precargadoBanner, { backgroundColor: isDark ? 'rgba(14,165,233,0.1)' : 'rgba(14,165,233,0.06)', borderColor: '#0EA5E9' }]}>
               <Ionicons name="information-circle" size={18} color="#0EA5E9" />
               <Text style={{ color: '#0EA5E9', fontSize: 13, marginLeft: 8, flex: 1 }}>
@@ -262,8 +261,13 @@ export default function ProCalculator() {
             </View>
           )}
 
-          <View style={{ marginBottom: 16 }}>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#F59E0B', width: '100%' }]} onPress={obtenerHSP}>
+          {/* Botones de acción: CFE arriba, NASA abajo — mismo tamaño */}
+          <View style={{ marginBottom: 16, gap: 10 }}>
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#8B5CF6' }]} onPress={escanearPDF}>
+              <Ionicons name="document-attach" size={20} color="#FFF" />
+              <Text style={s.btnTxt}>Escanear Recibo CFE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#F59E0B' }]} onPress={obtenerHSP}>
               <Ionicons name="radio-outline" size={20} color="#FFF" />
               <Text style={s.btnTxt}>Obtener HSP desde NASA (GPS)</Text>
             </TouchableOpacity>
@@ -519,7 +523,6 @@ export default function ProCalculator() {
                 <Text style={{ color:'#FFF', fontWeight:'bold', marginLeft:8, fontSize:15 }}>Preparar Cotización</Text>
               </TouchableOpacity>
 
-              {/* Botón Nueva cotización al final — igual que en básica */}
               <TouchableOpacity
                 style={[s.newQuoteBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
                 onPress={limpiarTodo}
@@ -532,7 +535,6 @@ export default function ProCalculator() {
         </View>
       </ScrollView>
 
-      {/* Modales */}
       <Modal visible={modalPaneles} animationType="slide" transparent onRequestClose={() => setModalPaneles(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
@@ -669,15 +671,13 @@ const MiniStat = ({ label, val, color }: any) => (
 const s = StyleSheet.create({
   container:       { padding:20, paddingBottom:50 },
   proHeader:       { flexDirection:'row', alignItems:'center', marginBottom:14 },
-  scanBtn:         { flexDirection:'row', alignItems:'center', backgroundColor:'#8B5CF6', paddingHorizontal:12, paddingVertical:9, borderRadius:10, gap:6 },
-  scanTxt:         { color:'#FFF', fontWeight:'bold', fontSize:13 },
   title:           { fontSize:20, fontWeight:'bold', marginBottom:12 },
   normaNote:       { fontSize:11, marginBottom:14, fontStyle:'italic' },
   secLabel:        { fontSize:15, fontWeight:'bold', marginBottom:8 },
   label:           { fontSize:14, fontWeight:'bold', marginBottom:5 },
   row2:            { flexDirection:'row', justifyContent:'space-between', marginBottom:16 },
-  actionBtn:       { flexDirection:'row', padding:12, borderRadius:8, justifyContent:'center', alignItems:'center' },
-  btnTxt:          { color:'#FFF', fontWeight:'bold', marginLeft:8 },
+  actionBtn:       { flexDirection:'row', padding:14, borderRadius:10, justifyContent:'center', alignItems:'center', gap:8 },
+  btnTxt:          { color:'#FFF', fontWeight:'bold', fontSize:15 },
   card:            { padding:20, borderRadius:12, borderWidth:1 },
   input:           { borderWidth:1, borderRadius:8, padding:12, fontSize:16 },
   selector:        { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:15 },
