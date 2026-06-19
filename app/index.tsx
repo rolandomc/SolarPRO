@@ -59,7 +59,6 @@ export default function Index() {
     ? parseFloat(tarifaManual) || 0
     : tarifaActiva.tarifa;
 
-  // ✅ Limpiar todos los campos
   const limpiarTodo = () => {
     setCliente('');
     setConsumoMensual('');
@@ -79,7 +78,6 @@ export default function Index() {
     card:  { backgroundColor: isDark ? '#1E293B' : '#FFF', borderColor: isDark ? '#334155' : '#E2E8F0' },
   };
 
-  // ── OCR ─────────────────────────────────────────────────────────────────
   const escanearRecibo = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -112,7 +110,6 @@ export default function Index() {
     } catch { Alert.alert('Error', 'Fallo al seleccionar el archivo.'); }
   };
 
-  // ── Cálculo ────────────────────────────────────────────────────────────
   const calcularSistema = () => {
     const consumo  = parseFloat(consumoMensual);
     const panelW   = parseFloat(potenciaPanel);
@@ -190,7 +187,6 @@ export default function Index() {
             <Text style={[s.headerSub, d.sub]}>Estimación rápida</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {/* ✅ Botón limpiar — solo visible si hay datos */}
             {(resultados || cliente || consumoMensual) && (
               <TouchableOpacity
                 style={[s.clearBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
@@ -321,10 +317,10 @@ export default function Index() {
           <View style={[s.card, d.card, { marginTop: 8 }]}>
             <Text style={[s.sectionTitle, d.text]}>Resultados del sistema</Text>
             <View style={s.kpiGrid}>
-              <KPICard icon="sunny"         color="#F59E0B" label="Paneles"       value={String(resultados.numPaneles)}                               sub={`${resultados.potenciaInstalada.toFixed(2)} kWp`}          isDark={isDark} />
-              <KPICard icon="hardware-chip" color="#0EA5E9" label="Inversor mín." value={`${resultados.inversorMin.toFixed(1)} kW`}                  sub="capacidad mínima"                                          isDark={isDark} />
-              <KPICard icon="trending-up"   color="#10B981" label="Ahorro/mes"   value={`$${Math.round(resultados.ahorroMensual).toLocaleString()}`}  sub={`$${Math.round(resultados.ahorroAnual).toLocaleString()}/año`} isDark={isDark} />
-              <KPICard icon="time-outline"  color="#8B5CF6" label="Recuperación" value={`${(resultados.roiMeses / 12).toFixed(1)} años`}              sub={`${Math.round(resultados.roiMeses)} meses`}                isDark={isDark} />
+              <KPICard icon="sunny"         color="#F59E0B" label="Paneles"       value={String(resultados.numPaneles)}                               sub={`${resultados.potenciaInstalada.toFixed(2)} kWp`}           isDark={isDark} />
+              <KPICard icon="hardware-chip" color="#0EA5E9" label="Inversor mín." value={`${resultados.inversorMin.toFixed(1)} kW`}                   sub="capacidad mínima"                                           isDark={isDark} />
+              <KPICard icon="trending-up"   color="#10B981" label="Ahorro/mes"    value={`$${Math.round(resultados.ahorroMensual).toLocaleString()}`}  sub={`$${Math.round(resultados.ahorroAnual).toLocaleString()}/año`} isDark={isDark} />
+              <KPICard icon="time-outline"  color="#8B5CF6" label="Recuperación"  value={`${(resultados.roiMeses / 12).toFixed(1)} años`}              sub={`${Math.round(resultados.roiMeses)} meses`}                 isDark={isDark} />
             </View>
 
             <View style={[s.coberturaWrap, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
@@ -401,7 +397,6 @@ export default function Index() {
               </TouchableOpacity>
             </View>
 
-            {/* ✅ Botón limpiar — al pie de los resultados */}
             <TouchableOpacity
               style={[s.newQuoteBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
               onPress={limpiarTodo}
@@ -486,4 +481,9 @@ const s = StyleSheet.create({
   roiBadge:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   ctaRow:        { flexDirection: 'row', gap: 10, marginTop: 8 },
   ctaBtn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, gap: 8 },
-  ctaTxt:
+  ctaTxt:        { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+  newQuoteBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 10, padding: 12, marginTop: 10, gap: 6 },
+  newQuoteTxt:   { fontSize: 14, fontWeight: '600' },
+  proBanner:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  proBannerIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(245,158,11,0.12)', justifyContent: 'center', alignItems: 'center' },
+});
