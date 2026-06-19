@@ -155,71 +155,72 @@ export default function History() {
   };
 
   return (
-    <SafeAreaView style={[{ flex: 1 }, d.bg]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[h.root, d.bg]} edges={['top', 'left', 'right']}>
 
-      <View style={[h.header, d.bg]}>
-        <Text style={[h.title, d.text]}>Historial de Proyectos</Text>
-        <Text style={[d.sub, { fontSize: 13 }]}>{lista.length} cotizaciones</Text>
-      </View>
+      {/* ── ZONA FIJA: nunca se encoge sin importar cuántos proyectos haya ── */}
+      <View style={h.topFixed}>
 
-      <View style={h.statsRow}>
-        <StatCard label="Instalado"  valor={`$${Math.round(totalInstalado/1000)}k`} color="#10B981" icon="sunny"           d={d} />
-        <StatCard label="Aprobado"   valor={`$${Math.round(totalVendido/1000)}k`}   color="#F59E0B" icon="checkmark-circle" d={d} />
-        <StatCard label="kWp inst."  valor={kwInstalados.toFixed(1)}                color="#0EA5E9" icon="flash"            d={d} />
-      </View>
+        <View style={h.header}>
+          <Text style={[h.title, d.text]}>Historial de Proyectos</Text>
+          <Text style={[d.sub, { fontSize: 13 }]}>{lista.length} cotizaciones</Text>
+        </View>
 
-      <View style={[h.searchBox, d.input]}>
-        <Ionicons name="search" size={18} color={isDark ? '#64748B' : '#94A3B8'} />
-        <TextInput
-          style={[{ flex: 1, marginLeft: 8, fontSize: 15 }, d.input, { borderWidth: 0, padding: 0 }]}
-          placeholder="Buscar cliente..."
-          placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-          value={busqueda}
-          onChangeText={setBusqueda}
-        />
-        {busqueda.length > 0 && (
-          <TouchableOpacity onPress={() => setBusqueda('')}>
-            <Ionicons name="close-circle" size={18} color="#94A3B8" />
-          </TouchableOpacity>
-        )}
-      </View>
+        <View style={h.statsRow}>
+          <StatCard label="Instalado" valor={`$${Math.round(totalInstalado / 1000)}k`} color="#10B981" icon="sunny"           d={d} />
+          <StatCard label="Aprobado"  valor={`$${Math.round(totalVendido / 1000)}k`}   color="#F59E0B" icon="checkmark-circle" d={d} />
+          <StatCard label="kWp inst." valor={kwInstalados.toFixed(1)}                  color="#0EA5E9" icon="flash"            d={d} />
+        </View>
 
-      {/* Filtros — ScrollView horizontal sin restricción de altura */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={h.filtrosScroll}
-        contentContainerStyle={h.filtrosContent}
-      >
-        <TouchableOpacity
-          style={[h.filtroBadge, filtroEstado === 'todos' && { backgroundColor: '#334155', borderColor: '#334155' }]}
-          onPress={() => setFiltroEstado('todos')}
+        <View style={[h.searchBox, d.input]}>
+          <Ionicons name="search" size={18} color={isDark ? '#64748B' : '#94A3B8'} />
+          <TextInput
+            style={[{ flex: 1, marginLeft: 8, fontSize: 15 }, d.input, { borderWidth: 0, padding: 0 }]}
+            placeholder="Buscar cliente..."
+            placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+            value={busqueda}
+            onChangeText={setBusqueda}
+          />
+          {busqueda.length > 0 && (
+            <TouchableOpacity onPress={() => setBusqueda('')}>
+              <Ionicons name="close-circle" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filtros — altura fija garantizada por topFixed */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={h.filtrosScroll}
+          contentContainerStyle={h.filtrosContent}
         >
-          <Text style={[
-            h.filtroBadgeTxt,
-            { color: filtroEstado === 'todos' ? '#FFF' : (isDark ? '#94A3B8' : '#64748B') },
-          ]}>Todos</Text>
-        </TouchableOpacity>
-
-        {ESTADOS.map(e => (
           <TouchableOpacity
-            key={e.key}
-            style={[
-              h.filtroBadge,
-              { borderColor: e.color },
-              filtroEstado === e.key && { backgroundColor: e.color },
-            ]}
-            onPress={() => setFiltroEstado(e.key)}
+            style={[h.filtroBadge, filtroEstado === 'todos' && { backgroundColor: '#334155', borderColor: '#334155' }]}
+            onPress={() => setFiltroEstado('todos')}
           >
-            <Ionicons name={e.icon as any} size={14} color={filtroEstado === e.key ? '#FFF' : e.color} />
-            <Text style={[
-              h.filtroBadgeTxt,
-              { marginLeft: 4, color: filtroEstado === e.key ? '#FFF' : e.color },
-            ]}>{e.label}</Text>
+            <Text style={[h.filtroBadgeTxt, { color: filtroEstado === 'todos' ? '#FFF' : (isDark ? '#94A3B8' : '#64748B') }]}>
+              Todos
+            </Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
 
+          {ESTADOS.map(e => (
+            <TouchableOpacity
+              key={e.key}
+              style={[h.filtroBadge, { borderColor: e.color }, filtroEstado === e.key && { backgroundColor: e.color }]}
+              onPress={() => setFiltroEstado(e.key)}
+            >
+              <Ionicons name={e.icon as any} size={14} color={filtroEstado === e.key ? '#FFF' : e.color} />
+              <Text style={[h.filtroBadgeTxt, { marginLeft: 4, color: filtroEstado === e.key ? '#FFF' : e.color }]}>
+                {e.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+      </View>
+      {/* ── FIN ZONA FIJA ── */}
+
+      {/* ── ZONA FLEXIBLE: el FlatList crece solo aquí, nunca aplasta lo de arriba ── */}
       {listaFiltrada.length === 0 ? (
         <View style={h.empty}>
           <Ionicons name="folder-open-outline" size={64} color={isDark ? '#334155' : '#CBD5E1'} />
@@ -231,6 +232,7 @@ export default function History() {
         </View>
       ) : (
         <FlatList
+          style={h.flatList}
           data={listaFiltrada}
           keyExtractor={i => i.id}
           renderItem={renderItem}
@@ -364,17 +366,21 @@ const RoiMini = ({ label, valor, color }: any) => (
 );
 
 const h = StyleSheet.create({
+  // SafeAreaView ocupa toda la pantalla en columna
+  root:           { flex: 1, flexDirection: 'column' },
+  // Zona superior — tamaño natural (wrap), NUNCA se encoge
+  topFixed:       { flexShrink: 0 },
   header:         { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title:          { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
   statsRow:       { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
   statCard:       { flex: 1, alignItems: 'center', borderRadius: 10, borderWidth: 1, padding: 12, marginHorizontal: 4 },
   searchBox:      { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 },
-  // Sin maxHeight — se adapta al contenido y no aplasta los badges
   filtrosScroll:  { flexGrow: 0 },
   filtrosContent: { paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center' },
-  // flexShrink:0 evita que el badge se encoja dentro del ScrollView horizontal
   filtroBadge:    { flexShrink: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#334155', marginRight: 8 },
   filtroBadgeTxt: { fontSize: 13, fontWeight: 'bold' },
+  // FlatList toma el espacio restante y hace scroll internamente
+  flatList:       { flex: 1 },
   empty:          { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   itemCard:       { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
   itemRight:      { alignItems: 'flex-end', minWidth: 100, flexShrink: 0 },
