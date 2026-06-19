@@ -5,11 +5,25 @@ import * as Sharing from "expo-sharing";
 export interface ItemCotizacion { id: string; descripcion: string; cantidad: string; precio: string; }
 export interface PerfilEmpresa { nombre: string; telefono: string; email: string; logoBase64: string; }
 
+export interface RoiData {
+  tarifa: string;
+  precioKwh: number;
+  kwGeneradosMes: number;
+  ahorroMensual: number;
+  ahorroBimestral: number;
+  ahorroAnual: number;
+  roiMeses: number;
+  roiAnos: string;
+  ahorroTotal25: number;
+  gananciaTotal25: number;
+}
+
 export const generarCotizacionProfesional = async (
-  cliente: string, 
-  items: ItemCotizacion[], 
-  total: number, 
-  perfil: PerfilEmpresa | null
+  cliente: string,
+  items: ItemCotizacion[],
+  total: number,
+  perfil: PerfilEmpresa | null,
+  roi?: RoiData | null,
 ) => {
   const filasHTML = items.map(item => `
     <tr>
@@ -20,16 +34,120 @@ export const generarCotizacionProfesional = async (
     </tr>
   `).join('');
 
-  // Bloque del encabezado de la empresa (logo e info)
-  const logoHTML = perfil?.logoBase64 
-    ? `<img src="${perfil.logoBase64}" style="max-height: 80px; max-width: 200px; object-fit: contain;" />` 
+  const logoHTML = perfil?.logoBase64
+    ? `<img src="${perfil.logoBase64}" style="max-height: 80px; max-width: 200px; object-fit: contain;" />`
     : `<h2 style="color: #0EA5E9; margin: 0; font-size: 28px;">SolarCalc Pro</h2>`;
 
   const infoEmpresaHTML = perfil ? `
     <p style="margin: 4px 0; color: #64748B; font-size: 14px;">${perfil.nombre}</p>
-    <p style="margin: 4px 0; color: #64748B; font-size: 14px;">📞 ${perfil.telefono}</p>
-    <p style="margin: 4px 0; color: #64748B; font-size: 14px;">✉️ ${perfil.email}</p>
+    <p style="margin: 4px 0; color: #64748B; font-size: 14px;">Tel: ${perfil.telefono}</p>
+    <p style="margin: 4px 0; color: #64748B; font-size: 14px;">${perfil.email}</p>
   ` : `<p style="margin: 4px 0; color: #64748B;">Instalador Independiente</p>`;
+
+  // ── Sección ROI ────────────────────────────────────────────────────────────
+  const roiHTML = roi ? `
+    <div style="margin-top: 40px; page-break-inside: avoid;">
+
+      <!-- Encabezado tarjeta -->
+      <div style="background: linear-gradient(135deg, #064E3B 0%, #065F46 100%);
+                  border-radius: 12px; padding: 28px; color: white;">
+
+        <h2 style="margin: 0 0 4px 0; font-size: 20px; color: #6EE7B7; letter-spacing: 0.5px;">
+          Análisis de Retorno de Inversión
+        </h2>
+        <p style="margin: 0 0 22px 0; font-size: 12px; color: #A7F3D0;">
+          Tarifa CFE: <b>${roi.tarifa}</b> &nbsp;•&nbsp;
+          Precio kWh: <b>$${roi.precioKwh}</b> &nbsp;•&nbsp;
+          Generación estimada: <b>${roi.kwGeneradosMes.toLocaleString()} kWh/mes</b> &nbsp;•&nbsp;
+          Factor de rendimiento: <b>PR = 80%</b>
+        </p>
+
+        <!-- 3 chips de ahorro -->
+        <table style="width: 100%; border-collapse: separate; border-spacing: 8px 0; margin-bottom: 20px;">
+          <tr>
+            <td style="width: 32%; text-align: center;
+                       background: rgba(255,255,255,0.10); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: #A7F3D0; text-transform: uppercase;
+                          letter-spacing: 0.8px; margin-bottom: 6px;">Ahorro mensual</div>
+              <div style="font-size: 28px; font-weight: bold; color: #FFFFFF;">
+                $${roi.ahorroMensual.toLocaleString()}
+              </div>
+              <div style="font-size: 11px; color: #6EE7B7; margin-top: 3px;">MXN / mes</div>
+            </td>
+            <td style="width: 32%; text-align: center;
+                       background: rgba(255,255,255,0.10); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: #A7F3D0; text-transform: uppercase;
+                          letter-spacing: 0.8px; margin-bottom: 6px;">Ahorro bimestral</div>
+              <div style="font-size: 28px; font-weight: bold; color: #FFFFFF;">
+                $${roi.ahorroBimestral.toLocaleString()}
+              </div>
+              <div style="font-size: 11px; color: #6EE7B7; margin-top: 3px;">MXN / bimestre</div>
+            </td>
+            <td style="width: 32%; text-align: center;
+                       background: rgba(255,255,255,0.10); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: #A7F3D0; text-transform: uppercase;
+                          letter-spacing: 0.8px; margin-bottom: 6px;">Ahorro anual</div>
+              <div style="font-size: 28px; font-weight: bold; color: #FFFFFF;">
+                $${roi.ahorroAnual.toLocaleString()}
+              </div>
+              <div style="font-size: 11px; color: #6EE7B7; margin-top: 3px;">MXN / año</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Recuperación destacada -->
+        <div style="background: rgba(14,165,233,0.22); border: 1.5px solid #38BDF8;
+                    border-radius: 10px; padding: 20px; text-align: center; margin-bottom: 20px;">
+          <div style="font-size: 13px; color: #BAE6FD; margin-bottom: 6px;">
+            Recuperas tu inversión en
+          </div>
+          <div style="font-size: 48px; font-weight: bold; color: #FFFFFF; line-height: 1.1;">
+            ${roi.roiMeses} meses
+          </div>
+          <div style="font-size: 16px; color: #BAE6FD; margin-top: 4px;">
+            (${roi.roiAnos} años)
+          </div>
+        </div>
+
+        <!-- Proyección 25 años -->
+        <div style="background: rgba(0,0,0,0.22); border-radius: 10px; padding: 18px;">
+          <div style="font-size: 13px; color: #A7F3D0; font-weight: bold; margin-bottom: 12px;
+                      text-transform: uppercase; letter-spacing: 0.5px;">
+            Proyección a 25 años — vida útil de los paneles
+          </div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 7px 0; font-size: 13px; color: #D1FAE5;">Ahorro total generado</td>
+              <td style="text-align: right; font-weight: bold; font-size: 16px; color: #FFFFFF;">
+                $${roi.ahorroTotal25.toLocaleString()}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 7px 0; font-size: 13px; color: #D1FAE5;">Inversión inicial</td>
+              <td style="text-align: right; font-weight: bold; font-size: 16px; color: #FCA5A5;">
+                − $${total.toLocaleString()}
+              </td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.18);">
+              <td style="padding: 10px 0 4px; font-size: 16px; font-weight: bold; color: #6EE7B7;">
+                Ganancia neta
+              </td>
+              <td style="text-align: right; font-weight: bold; font-size: 24px; padding-top: 10px;
+                         color: ${roi.gananciaTotal25 >= 0 ? '#6EE7B7' : '#FCA5A5'};">
+                $${roi.gananciaTotal25.toLocaleString()}
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <p style="margin: 16px 0 0 0; font-size: 10px; color: #6EE7B7;
+                  font-style: italic; text-align: center;">
+          * Estimado con tarifa ${roi.tarifa} a $${roi.precioKwh}/kWh y PR=80%.
+          No incluye incrementos tarifarios anuales (~5%). Sin considerar depreciación de equipo.
+        </p>
+      </div>
+    </div>
+  ` : '';
 
   const html = `
     <html>
@@ -76,6 +194,8 @@ export const generarCotizacionProfesional = async (
           </div>
           <p style="color: #94A3B8; font-size: 12px; margin-top: 20px;">* Esta cotización está sujeta a cambios y validación técnica en sitio.</p>
         </div>
+
+        ${roiHTML}
       </body>
     </html>
   `;
