@@ -69,6 +69,17 @@ export default function ProCalculator() {
     { tarifa: 'HM / MT',     fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F', voltajeAC: 380 },
   ];
 
+  const limpiarTodo = () => {
+    setCliente('');
+    setConsumo('');
+    setHsp('');
+    setHspMeta(null);
+    setPanelSelId(PANELES_DB[0].id);
+    setTipoConexion({ tarifa: 'Residencial', fases: 1, descripcion: 'Residencial — 220V bifásico L1-L2-N', voltajeAC: 220 });
+    setResultados(null);
+    setInversoresCompatibles([]);
+  };
+
   const escanearPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
@@ -251,7 +262,6 @@ export default function ProCalculator() {
             </View>
           )}
 
-          {/* Solo botón HSP NASA en la fila de acciones */}
           <View style={{ marginBottom: 16 }}>
             <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#F59E0B', width: '100%' }]} onPress={obtenerHSP}>
               <Ionicons name="radio-outline" size={20} color="#FFF" />
@@ -508,6 +518,15 @@ export default function ProCalculator() {
                 <Ionicons name="document-text-outline" size={20} color="#FFF" />
                 <Text style={{ color:'#FFF', fontWeight:'bold', marginLeft:8, fontSize:15 }}>Preparar Cotización</Text>
               </TouchableOpacity>
+
+              {/* Botón Nueva cotización al final — igual que en básica */}
+              <TouchableOpacity
+                style={[s.newQuoteBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
+                onPress={limpiarTodo}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+                <Text style={[s.newQuoteTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nueva cotización</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -704,6 +723,8 @@ const s = StyleSheet.create({
   optionGrid:      { flexDirection:'row', justifyContent:'space-between', marginTop:10, marginBottom:10 },
   quoteOptionBtn:  { flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:8, marginTop:4 },
   quoteOptionTxt:  { color:'#FFF', fontWeight:'bold', marginLeft:8 },
+  newQuoteBtn:     { flexDirection:'row', alignItems:'center', justifyContent:'center', borderWidth:1, borderRadius:10, padding:12, marginTop:10, gap:6 },
+  newQuoteTxt:     { fontSize:14, fontWeight:'600' },
   modalOverlay:    { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
   modalBox:        { borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'82%' },
   modalHeader:     { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 },

@@ -180,21 +180,12 @@ export default function Index() {
     <SafeAreaView style={[s.safe, d.bg]} edges={['top','left','right']}>
       <ScrollView contentContainerStyle={[s.scroll, d.bg]}>
 
-        {/* Header — solo botón Nuevo si hay datos */}
+        {/* Header — solo título, sin botones */}
         <View style={s.header}>
           <View>
             <Text style={[s.headerTitle, d.text]}>Calculadora Solar</Text>
             <Text style={[s.headerSub, d.sub]}>Estimación rápida</Text>
           </View>
-          {(resultados || cliente || consumoMensual) && (
-            <TouchableOpacity
-              style={[s.clearBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
-              onPress={limpiarTodo}
-            >
-              <Ionicons name="refresh" size={16} color={isDark ? '#94A3B8' : '#64748B'} />
-              <Text style={[s.clearTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nuevo</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Tarjeta OCR */}
@@ -300,7 +291,6 @@ export default function Index() {
             value={porcentajeAhorro} onChangeText={setPorcentajeAhorro}
           />
 
-          {/* Botón Recibo CFE — único, dentro del formulario */}
           <TouchableOpacity style={s.scanBtn} onPress={escanearRecibo}>
             <Ionicons name="document-attach" size={20} color="#FFF" />
             <Text style={s.scanTxt}>Escanear Recibo CFE</Text>
@@ -460,8 +450,6 @@ const s = StyleSheet.create({
   header:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   headerTitle:   { fontSize: 22, fontWeight: 'bold' },
   headerSub:     { fontSize: 13, marginTop: 2 },
-  clearBtn:      { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
-  clearTxt:      { fontSize: 12, fontWeight: '600' },
   scanBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 10, gap: 8 },
   scanTxt:       { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   card:          { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 12 },
