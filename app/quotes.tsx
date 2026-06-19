@@ -10,7 +10,7 @@ import { ThemeContext } from './_layout';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { generarCotizacionProfesional, ItemCotizacion, RoiData, IngData } from '../utils/pdfGenerator';
+import { generarCotizacionProfesional, ItemCotizacion, RoiData } from '../utils/pdfGenerator';
 
 export default function Quotes() {
   const { isDark } = useContext(ThemeContext);
@@ -25,7 +25,6 @@ export default function Quotes() {
   const [cant, setCant]                 = useState('');
   const [prec, setPrec]                 = useState('');
   const [roiData, setRoiData]           = useState<RoiData | null>(null);
-  const [ingData, setIngData]           = useState<IngData | null>(null);
 
   useEffect(() => {
     if (params.clienteParam) {
@@ -36,9 +35,6 @@ export default function Quotes() {
       }
       if (params.roiParam) {
         try { setRoiData(JSON.parse(String(params.roiParam))); } catch (_) {}
-      }
-      if (params.ingParam) {
-        try { setIngData(JSON.parse(String(params.ingParam))); } catch (_) {}
       }
       setCotizacionId(null);
       return;
@@ -56,21 +52,20 @@ export default function Quotes() {
               setCliente(cot.cliente);
               setItems(cot.items || []);
               setRoiData(cot.roi || null);
-              setIngData(cot.ing || null);
             }
           }
         } catch {}
       };
       cargar();
     } else {
-      setCotizacionId(null); setCliente(''); setItems([]); setRoiData(null); setIngData(null);
+      setCotizacionId(null); setCliente(''); setItems([]); setRoiData(null);
     }
   }, [params.editId, params.clienteParam]);
 
   const limpiarFormulario = () => {
     setCotizacionId(null); setCliente(''); setItems([]);
-    setDesc(''); setCant(''); setPrec(''); setRoiData(null); setIngData(null);
-    router.setParams({ editId: '', clienteParam: '', itemsParam: '', roiParam: '', ingParam: '' });
+    setDesc(''); setCant(''); setPrec(''); setRoiData(null);
+    router.setParams({ editId: '', clienteParam: '', itemsParam: '', roiParam: '' });
   };
 
   const agregarItem = () => {
@@ -90,7 +85,7 @@ export default function Quotes() {
       const perfil = perfilGuardado ? JSON.parse(perfilGuardado) : null;
       const total  = calcularTotal();
 
-      await generarCotizacionProfesional(cliente, items, total, perfil, roiData, ingData);
+      await generarCotizacionProfesional(cliente, items, total, perfil, roiData);
 
       const historialGuardado = await AsyncStorage.getItem('historialCotizaciones');
       let historial = historialGuardado ? JSON.parse(historialGuardado) : [];
@@ -99,7 +94,6 @@ export default function Quotes() {
         cliente, items, total,
         fecha:   new Date().toLocaleDateString(),
         roi:     roiData,
-        ing:     ingData,
       };
       if (cotizacionId) {
         historial = historial.map((c: any) => c.id === cotizacionId ? nuevaCotizacion : c);
@@ -125,6 +119,7 @@ export default function Quotes() {
   return (
     <SafeAreaView style={[{ flex:1 }, ds.bg]} edges={['top','left','right']}>
       <ScrollView style={[{ flex:1 }, ds.bg]} contentContainerStyle={{ padding:20, paddingBottom:60 }}>
+
         <View style={qs.headerRow}>
           <Text style={[qs.title, ds.text]}>{cotizacionId ? 'Editar Cotización' : 'Nueva Cotización'}</Text>
           {(cotizacionId || cliente) && (
@@ -189,16 +184,43 @@ export default function Quotes() {
             <Text style={[ds.sub, { fontSize:12, marginBottom:12 }]}>
               Tarifa CFE: {roiData.tarifa}  •  ${roiData.precioKwh}/kWh  •  Sistema genera ~{roiData.kwGeneradosMes} kWh/mes
             </Text>
-          </View>
-        )}
 
-        {ingData && (
-          <View style={[qs.roiCard, { borderColor:'#0EA5E9', backgroundColor: isDark?'rgba(14,165,233,0.06)':'rgba(14,165,233,0.04)' }]}>
-            <View style={qs.roiHeader}>
-              <Ionicons name="git-network-outline" size={22} color="#0EA5E9" />
-              <Text style={[ds.text, { fontWeight:'bold', fontSize:16, marginLeft:8 }]}>Diagrama unifilar incluido en PDF</Text>
+            <View style={qs.roiChips}>
+              <RoiChip icon="calendar"    color="#10B981" titulo="Ahorro bimestral" valor={`$${roiData.ahorroBimestral.toLocaleString()}`} sub="MXN c/2 meses" />
+              <RoiChip icon="cash"        color="#0EA5E9" titulo="Ahorro mensual"   valor={`$${roiData.ahorroMensual.toLocaleString()}`}   sub="MXN/mes" />
+              <RoiChip icon="stats-chart" color="#F59E0B" titulo="Ahorro anual"     valor={`$${roiData.ahorroAnual.toLocaleString()}`}     sub="MXN/año" />
             </View>
-            <Text style={[ds.sub, { fontSize:12 }]}>Paneles: {ingData.numPaneles} • Sistema: {ingData.potenciaKW.toFixed(2)} kWp • Inversor: {ingData.inversor?.marca} {ingData.inversor?.modelo}</Text>
+
+            <View style={[qs.roiHighlight, { borderColor:'#0EA5E9', backgroundColor: isDark?'rgba(14,165,233,0.08)':'rgba(14,165,233,0.06)' }]}>
+              <Ionicons name="time-outline" size={32} color="#0EA5E9" />
+              <View style={{ flex:1, marginLeft:12 }}>
+                <Text style={[ds.sub, { fontSize:12 }]}>Recuperas tu inversión en</Text>
+                <Text style={{ fontSize:26, fontWeight:'bold', color:'#0EA5E9' }}>{roiData.roiMeses} meses</Text>
+                <Text style={[ds.sub, { fontSize:12 }]}>({roiData.roiAnos} años)</Text>
+              </View>
+            </View>
+
+            <View style={[qs.proyeccionBox, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
+              <Text style={[ds.sub, { fontSize:12, marginBottom:6, fontWeight:'bold' }]}>Proyección a 25 años</Text>
+              <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:4 }}>
+                <Text style={[ds.sub, { fontSize:13 }]}>Ahorro total generado</Text>
+                <Text style={[ds.text, { fontWeight:'bold', fontSize:14 }]}>${roiData.ahorroTotal25.toLocaleString()}</Text>
+              </View>
+              <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:4 }}>
+                <Text style={[ds.sub, { fontSize:13 }]}>Inversión inicial</Text>
+                <Text style={[{ color:'#EF4444', fontWeight:'bold', fontSize:14 }]}>- ${total.toLocaleString()}</Text>
+              </View>
+              <View style={{ flexDirection:'row', justifyContent:'space-between', borderTopWidth:1, borderColor: isDark?'#334155':'#CBD5E1', paddingTop:6, marginTop:4 }}>
+                <Text style={[ds.text, { fontWeight:'bold', fontSize:14 }]}>Ganancia neta</Text>
+                <Text style={{ fontWeight:'bold', fontSize:18, color: roiData.gananciaTotal25 >= 0 ? '#10B981' : '#EF4444' }}>
+                  ${roiData.gananciaTotal25.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[ds.sub, { fontSize:10, marginTop:10, fontStyle:'italic', textAlign:'center' }]}>
+              * Estimado con tarifa CFE {roiData.tarifa} ${roiData.precioKwh}/kWh y factor PR=80%.
+            </Text>
           </View>
         )}
 
@@ -208,6 +230,7 @@ export default function Quotes() {
             {cotizacionId ? 'Actualizar Cotización' : 'Generar PDF'}
           </Text>
         </TouchableOpacity>
+
       </ScrollView>
 
       {!isPro && (
@@ -225,6 +248,15 @@ export default function Quotes() {
   );
 }
 
+const RoiChip = ({ icon, color, titulo, valor, sub }: any) => (
+  <View style={[qs.roiChip, { backgroundColor: color + '15' }]}>
+    <Ionicons name={icon} size={18} color={color} />
+    <Text style={{ fontSize:10, color:'#64748B', marginTop:4 }}>{titulo}</Text>
+    <Text style={{ fontSize:16, fontWeight:'bold', color }}>{valor}</Text>
+    <Text style={{ fontSize:10, color:'#94A3B8' }}>{sub}</Text>
+  </View>
+);
+
 const qs = StyleSheet.create({
   headerRow:    { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
   title:        { fontSize:20, fontWeight:'bold' },
@@ -237,4 +269,8 @@ const qs = StyleSheet.create({
   pdfBtn:       { backgroundColor:'#0EA5E9', flexDirection:'row', padding:16, borderRadius:8, alignItems:'center', justifyContent:'center', marginTop:20 },
   roiCard:      { borderWidth:1.5, borderRadius:14, padding:16, marginBottom:20 },
   roiHeader:    { flexDirection:'row', alignItems:'center', marginBottom:6 },
+  roiChips:     { flexDirection:'row', justifyContent:'space-between', marginBottom:14 },
+  roiChip:      { flex:1, alignItems:'center', borderRadius:10, padding:10, marginHorizontal:3 },
+  roiHighlight: { flexDirection:'row', alignItems:'center', borderWidth:1.5, borderRadius:10, padding:14, marginBottom:14 },
+  proyeccionBox:{ borderWidth:1, borderRadius:10, padding:12 },
 });
