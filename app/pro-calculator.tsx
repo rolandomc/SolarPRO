@@ -28,6 +28,62 @@ const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   return INVERSORES_DB.reduce((p, c) => c.max_dc_input > p.max_dc_input ? c : p);
 };
 
+// Tarifas CFE México → precio kWh referencia 2025 (promedio ponderado por bloque)
+// DAC/Residencial: ~$2.85/kWh promedio real incluyendo cargos fijos
+// General BT (tarifa 2): ~$3.20/kWh
+// Industrial HM/MT: ~$1.80/kWh
+const PRECIO_KWH_POR_TARIFA: Record<string, number> = {
+  'Residencial': 2.85,
+  'DAC':         2.85,
+  '1':           1.80,
+  '1A':          1.80,
+  'General BT':  3.20,
+  '2':           3.20,
+  '3':           2.50,
+  'General 3F':  2.50,
+  'HM':          1.80,
+  'HM / MT':     1.80,
+  'OM':          2.10,
+  'MT':          1.80,
+};
+
+const calcularROI = (
+  consumoMensualKwh: number,
+  costoTotal: number,
+  tarifa: string,
+  potenciaKWp: number,
+) => {
+  // Precio kWh según tarifa detectada del recibo
+  const precioKwh = PRECIO_KWH_POR_TARIFA[tarifa] ?? 2.85;
+
+  // El sistema genera ~85% del consumo (factor de rendimiento y autoconsumo real)
+  const kwGeneradosMes   = potenciaKWp * 4.5 * 30 * 0.80; // HSP prom 4.5h, PR 80%
+  const kwhAhorroDirecto = Math.min(consumoMensualKwh, kwGeneradosMes);
+
+  const ahorroMensual    = Math.round(kwhAhorroDirecto * precioKwh);
+  const ahorroBimestral  = ahorroMensual * 2;
+  const ahorroAnual      = ahorroMensual * 12;
+  const roiMeses         = Math.round(costoTotal / ahorroMensual);
+  const roiAnos          = (roiMeses / 12).toFixed(1);
+
+  // Proyección 25 años (vida útil paneles)
+  const ahorroTotal25    = ahorroAnual * 25;
+  const gananciaTotal25  = ahorroTotal25 - costoTotal;
+
+  return {
+    precioKwh,
+    kwGeneradosMes:   Math.round(kwGeneradosMes),
+    ahorroMensual,
+    ahorroBimestral,
+    ahorroAnual,
+    roiMeses,
+    roiAnos,
+    ahorroTotal25,
+    gananciaTotal25,
+    tarifa,
+  };
+};
+
 export default function ProCalculator() {
   const { isDark } = useContext(ThemeContext);
   const router = useRouter();
@@ -64,12 +120,19 @@ export default function ProCalculator() {
         const file = result.assets[0];
         const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
         if (r.exito) {
-          if (r.consumo)    setConsumo(r.consumo);
-          if (r.cliente)    setCliente(r.cliente);
+          if (r.consumo)  setConsumo(r.consumo);
+          if (r.cliente)  setCliente(r.cliente);
           if (r.tipoConexion) {
+            // ─ AUTO: tarifa + fases detectados del recibo ─
             setTipoConexion(r.tipoConexion);
-            Alert.alert('Recibo analizado',
-              `Cliente: ${r.cliente || '(no detectado)'}\nConsumo: ${r.consumo} kWh/mes\nConexión: ${r.tipoConexion.descripcion}\n\n${r.mensaje || ''}`);
+            Alert.alert(
+              '✅ Recibo analizado',
+              `Cliente: ${r.cliente || '(no detectado)'}\n` +
+              `Consumo: ${r.consumo} kWh/mes\n` +
+              `Tarifa CFE: ${r.tipoConexion.tarifa}\n` +
+              `Suministro: ${r.tipoConexion.descripcion}\n\n` +
+              `${r.mensaje || ''}`,
+            );
           }
         } else Alert.alert('Error OCR', r.error);
       }
@@ -105,6 +168,8 @@ export default function ProCalculator() {
     const costoInstalacion = Math.round(potenciaKW * 1000 * 8);
     const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
 
+    const roi = calcularROI(cons, costoTotal, tipoConexion.tarifa, potenciaKW);
+
     let compatibles: any[] = [];
     if (st.errores.length > 0) {
       compatibles = sugerirInversorCompatible(panel, numPaneles, INVERSORES_DB, potenciaKW)
@@ -120,6 +185,7 @@ export default function ProCalculator() {
       costoInstalacion, costoTotal, tipoConexion,
       hayErrores: st.errores.length > 0,
       compatibles,
+      roi,
     });
   };
 
@@ -132,11 +198,14 @@ export default function ProCalculator() {
     const costoPaneles     = numPaneles * panel.precio_mxn;
     const costoInversor    = nuevoInversor.precio_mxn;
     const costoInstalacion = Math.round(resultados.potenciaKW * 1000 * 8);
+    const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
+    const roi              = calcularROI(parseFloat(consumo), costoTotal, resultados.tipoConexion.tarifa, resultados.potenciaKW);
     setResultados({
       ...resultados, inversor: nuevoInversor, protecciones, costoInversor,
-      costoTotal: costoPaneles + costoInversor + costoInstalacion,
+      costoTotal,
       hayErrores: protecciones.strings.errores.length > 0,
       compatibles: [],
+      roi,
     });
     setInversoresCompatibles([]);
   };
@@ -147,9 +216,16 @@ export default function ProCalculator() {
     const items = JSON.stringify([
       { id:'1', descripcion:`Panel ${resultados.panelObj.marca} ${resultados.panelObj.modelo}`, cantidad: String(resultados.numPaneles), precio: String(resultados.panelObj.precio_mxn) },
       { id:'2', descripcion:`Inversor ${resultados.inversor.marca} ${resultados.inversor.modelo}`, cantidad:'1', precio: String(resultados.inversor.precio_mxn) },
-      { id:'3', descripcion:`Instalacion ${resultados.potenciaKW.toFixed(2)} kWp`, cantidad:'1', precio: String(resultados.costoInstalacion) },
+      { id:'3', descripcion:`Instalación ${resultados.potenciaKW.toFixed(2)} kWp`, cantidad:'1', precio: String(resultados.costoInstalacion) },
     ]);
-    router.push({ pathname:'/quotes', params:{ clienteParam: nc, itemsParam: items } });
+    router.push({
+      pathname: '/quotes',
+      params: {
+        clienteParam: nc,
+        itemsParam:   items,
+        roiParam:     JSON.stringify(resultados.roi),
+      },
+    });
   };
 
   const d = {
@@ -182,7 +258,7 @@ export default function ProCalculator() {
 
           <View style={[s.card, d.card]}>
             <TextInput style={[s.input, d.input, { marginBottom:10 }]}
-              placeholder="Cliente / Direccion" placeholderTextColor={isDark?'#64748B':'#94A3B8'}
+              placeholder="Cliente / Dirección" placeholderTextColor={isDark?'#64748B':'#94A3B8'}
               value={cliente} onChangeText={setCliente} />
             <View style={s.row2}>
               <TextInput style={[s.input, d.input, { width:'48%' }]}
@@ -204,6 +280,7 @@ export default function ProCalculator() {
               <View style={{ flex:1, marginLeft:10 }}>
                 <Text style={[d.text, { fontWeight:'bold', fontSize:14 }]}>
                   {tipoConexion.fases === 1 ? 'Monofásico' : 'Trifásico'} — {tipoConexion.voltajeAC}V
+                  {tipoConexion.tarifa ? `  ·  Tarifa ${tipoConexion.tarifa}` : ''}
                 </Text>
                 <Text style={[d.sub, { fontSize:12 }]}>{tipoConexion.descripcion}</Text>
               </View>
@@ -230,7 +307,6 @@ export default function ProCalculator() {
               <Text style={[s.title, { color:'#10B981' }]}>Memoria de Cálculo</Text>
               <Text style={[s.normaNote, d.sub]}>NOM-001-SEDE-2012 Art.690 / NMX-J-680-ANCE-2014</Text>
 
-              {/* Badge suministro */}
               <View style={[s.conexionBadge, {
                 borderColor: resultados.tipoConexion.fases === 3 ? '#F59E0B' : '#10B981',
                 backgroundColor: resultados.tipoConexion.fases === 3 ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.08)'
@@ -245,7 +321,6 @@ export default function ProCalculator() {
                 </View>
               </View>
 
-              {/* Chips */}
               <Text style={[s.secLabel, d.text]}>Arreglo FV</Text>
               <View style={s.chips}>
                 <Chip icon="sunny"            color="#F59E0B" num={String(resultados.numPaneles)}    label="Paneles" />
@@ -256,7 +331,6 @@ export default function ProCalculator() {
 
               <Divider />
 
-              {/* Diagrama strings */}
               <Text style={[s.secLabel, d.text]}>Arreglo de Strings (NOM-001 Art.690.7)</Text>
               <View style={s.stringDiagram}>
                 <StringBox num={st.panelesPorString}  label={`Paneles/String\n(serie)`} />
@@ -277,49 +351,16 @@ export default function ProCalculator() {
                 </View>
               )}
 
-              {/*
-                TABLA ELECTRICA — qué compara cada fila:
-                ┌ Voc STC            → referencia, sin badge de validación
-                ├ Voc invierno       → ≤ max_dc_volts del inversor (NOM 690.7)
-                ├ Vmp string         → referencia punto de trabajo MPPT
-                ├ Isc 1 string       → referencia, sin badge de validación
-                ├ Isc entrada MPPT   → ≤ imax_por_mppt del inversor  ← VALIDACION REAL
-                └ Isc diseño fusible → solo info, para elegir calibre fusible/cable
-              */}
               <View style={[s.tabla, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
-                <TablaFila
-                  label="Voc string (STC 25°C)"
-                  val={`${st.vocStringStc} V`}
-                  badge="ref" badgeColor="#64748B" />
-                <TablaFila
-                  label="Voc string invierno (-10°C)"
-                  val={`${st.vocStringInvierno} V`}
-                  badge={st.vocDentroLimite ? '✓ OK' : '✗ FALLA'}
-                  badgeColor={st.vocDentroLimite ? '#10B981' : '#EF4444'} />
-                <TablaFila
-                  label="Vmp string (trabajo MPPT)"
-                  val={`${st.vmpString} V`}
-                  badge="MPPT" badgeColor="#0EA5E9" />
-                <TablaFila
-                  label="Isc de 1 string (STC)"
-                  val={`${st.iscString} A`}
-                  badge="ref" badgeColor="#64748B" />
-                <TablaFila
-                  label={`Isc entrada MPPT (${st.stringsEnParalelo} str × ${st.iscString}A)`}
-                  val={`${st.corrienteEntradaMPPT} A`}
-                  badge={st.iscDentroLimite ? '✓ OK' : '✗ FALLA'}
-                  badgeColor={st.iscDentroLimite ? '#10B981' : '#EF4444'} />
-                <TablaFila
-                  label={`Límite MPPT — ${resultados.inversor.marca} ${resultados.inversor.modelo}`}
-                  val={`${resultados.inversor.imax_por_mppt} A`}
-                  badge="max" badgeColor="#94A3B8" />
-                <TablaFila
-                  label="Isc diseño fusible (Isc×1.56, NOM 690.8)"
-                  val={`${st.iDisenoFusibleStr} A`}
-                  badge="fusible" badgeColor="#8B5CF6" last />
+                <TablaFila label="Voc string (STC 25°C)"           val={`${st.vocStringStc} V`}           badge="ref"    badgeColor="#64748B" />
+                <TablaFila label="Voc string invierno (-10°C)"     val={`${st.vocStringInvierno} V`}       badge={st.vocDentroLimite ? '✓ OK' : '✗ FALLA'} badgeColor={st.vocDentroLimite ? '#10B981' : '#EF4444'} />
+                <TablaFila label="Vmp string (trabajo MPPT)"       val={`${st.vmpString} V`}              badge="MPPT"   badgeColor="#0EA5E9" />
+                <TablaFila label="Isc de 1 string (STC)"           val={`${st.iscString} A`}              badge="ref"    badgeColor="#64748B" />
+                <TablaFila label={`Isc entrada MPPT (${st.stringsEnParalelo} str × ${st.iscString}A)`}  val={`${st.corrienteEntradaMPPT} A`} badge={st.iscDentroLimite ? '✓ OK' : '✗ FALLA'} badgeColor={st.iscDentroLimite ? '#10B981' : '#EF4444'} />
+                <TablaFila label={`Límite MPPT — ${resultados.inversor.marca} ${resultados.inversor.modelo}`} val={`${resultados.inversor.imax_por_mppt} A`} badge="max" badgeColor="#94A3B8" />
+                <TablaFila label="Isc diseño fusible (Isc×1.56, NOM 690.8)" val={`${st.iDisenoFusibleStr} A`} badge="fusible" badgeColor="#8B5CF6" last />
               </View>
 
-              {/* Errores NOM */}
               {st.errores.length > 0 && (
                 <View style={s.errorBox}>
                   <Text style={s.errorTitle}>Violación de Norma</Text>
@@ -333,14 +374,11 @@ export default function ProCalculator() {
                     </TouchableOpacity>
                   )}
                   {resultados.compatibles.length === 0 && (
-                    <Text style={[s.errorTxt, { marginTop:4 }]}>
-                      No hay inversor compatible en la base de datos.
-                    </Text>
+                    <Text style={[s.errorTxt, { marginTop:4 }]}>No hay inversor compatible en la base de datos.</Text>
                   )}
                 </View>
               )}
 
-              {/* Alertas */}
               {st.alertas.length > 0 && (
                 <View style={s.alertBox}>
                   {st.alertas.map((a: string, i: number) => <Text key={i} style={s.alertTxt}>{a}</Text>)}
@@ -349,17 +387,11 @@ export default function ProCalculator() {
 
               <Divider />
 
-              {/* Inversor */}
               <Text style={[s.secLabel, d.text]}>Inversor Sugerido</Text>
               <View style={[s.inversorCard, { borderColor: resultados.hayErrores ? '#EF4444' : '#10B981' }]}>
                 <View style={{ flex:1 }}>
-                  <Text style={[d.text, { fontWeight:'bold', fontSize:15 }]}>
-                    {resultados.inversor.marca} {resultados.inversor.modelo}
-                  </Text>
-                  <Text style={d.sub}>
-                    {resultados.inversor.fases === 1 ? 'Monofásico' : 'Trifásico'} {resultados.inversor.v_ac}V
-                    {'  •  '}{resultados.inversor.num_mppt} MPPT  •  {resultados.inversor.imax_por_mppt}A/MPPT
-                  </Text>
+                  <Text style={[d.text, { fontWeight:'bold', fontSize:15 }]}>{resultados.inversor.marca} {resultados.inversor.modelo}</Text>
+                  <Text style={d.sub}>{resultados.inversor.fases === 1 ? 'Monofásico' : 'Trifásico'} {resultados.inversor.v_ac}V{'  •  '}{resultados.inversor.num_mppt} MPPT  •  {resultados.inversor.imax_por_mppt}A/MPPT</Text>
                   <Text style={d.sub}>DC max: {(resultados.inversor.max_dc_input/1000).toFixed(1)} kW  •  Vmax: {resultados.inversor.max_dc_volts}V</Text>
                   <Text style={[{ color: resultados.hayErrores ? '#EF4444' : '#10B981', marginTop:4, fontWeight:'bold', fontSize:12 }]}>
                     {resultados.hayErrores ? 'No cumple NOM — cambiar inversor' : 'Cumple NOM-001 / NMX-J-680'}
@@ -370,7 +402,6 @@ export default function ProCalculator() {
 
               <Divider />
 
-              {/* Protecciones */}
               <Text style={[s.secLabel, d.text]}>Protecciones CC (por string)</Text>
               <Text style={d.sub}>  Isc diseño: {resultados.protecciones.iDisenoCC}A  (Isc × 1.56)</Text>
               <Text style={d.sub}>  Fusible: {resultados.protecciones.fusibleCC}A</Text>
@@ -382,15 +413,38 @@ export default function ProCalculator() {
 
               <Divider />
 
-              {/* Costos */}
               <Text style={[s.secLabel, d.text]}>Estimado de Costos</Text>
               <CostoFila label={`Paneles (${resultados.numPaneles} × $${resultados.panelObj.precio_mxn.toLocaleString()})`} val={`$${resultados.costoPaneles.toLocaleString()}`} d={d} />
-              <CostoFila label="Inversor" val={`$${resultados.costoInversor.toLocaleString()}`} d={d} />
+              <CostoFila label="Inversor"                val={`$${resultados.costoInversor.toLocaleString()}`}    d={d} />
               <CostoFila label="Instalación y materiales" val={`$${resultados.costoInstalacion.toLocaleString()}`} d={d} />
               <View style={[s.totalRow, { borderColor:'#CBD5E1' }]}>
                 <Text style={[d.text, { fontWeight:'bold', fontSize:16 }]}>TOTAL ESTIMADO</Text>
                 <Text style={{ fontWeight:'bold', fontSize:18, color:'#10B981' }}>${resultados.costoTotal.toLocaleString()}</Text>
               </View>
+
+              {/* ─── PREVIEW ROI ────────────────────────────────────── */}
+              {resultados.roi && (
+                <View style={[s.roiPreview, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
+                  <View style={{ flexDirection:'row', alignItems:'center', marginBottom:8 }}>
+                    <Ionicons name="trending-up" size={20} color="#10B981" />
+                    <Text style={[d.text, { fontWeight:'bold', fontSize:14, marginLeft:6 }]}>Retorno de Inversión</Text>
+                  </View>
+                  <View style={s.roiRow}>
+                    <View style={s.roiChip}>
+                      <Text style={[d.sub, { fontSize:11 }]}>Ahorro/bimestre</Text>
+                      <Text style={{ fontSize:16, fontWeight:'bold', color:'#10B981' }}>${resultados.roi.ahorroBimestral.toLocaleString()}</Text>
+                    </View>
+                    <View style={s.roiChip}>
+                      <Text style={[d.sub, { fontSize:11 }]}>Recuperación</Text>
+                      <Text style={{ fontSize:16, fontWeight:'bold', color:'#0EA5E9' }}>{resultados.roi.roiMeses} meses</Text>
+                    </View>
+                    <View style={s.roiChip}>
+                      <Text style={[d.sub, { fontSize:11 }]}>Ganancia 25 años</Text>
+                      <Text style={{ fontSize:14, fontWeight:'bold', color:'#F59E0B' }}>${Math.round(resultados.roi.gananciaTotal25/1000)}k</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               <TouchableOpacity style={[s.calcBtn, { backgroundColor:'#0EA5E9', marginTop:20 }]} onPress={enviarACotizacion}>
                 <Ionicons name="document-text-outline" size={20} color="#FFF" />
@@ -438,7 +492,7 @@ export default function ProCalculator() {
           <View style={[s.modalBox, d.modal]}>
             <ModalHeader title="Tipo de Suministro Eléctrico" onClose={() => setModalFases(false)} d={d} />
             <Text style={[{ fontSize:13, marginBottom:12, color:'#64748B' }]}>
-              El recibo CFE indica la tarifa. Residencial siempre es bifásico 220V (L1-L2-N).
+              Detectado automáticamente del recibo CFE. Puedes cambiarlo si es necesario.
             </Text>
             {opcionesFases.map((op, idx) => (
               <TouchableOpacity key={idx} style={[s.listItem, {
@@ -472,10 +526,7 @@ export default function ProCalculator() {
                   onPress={() => cambiarAInversor(item)}>
                   <View style={{ flex:1 }}>
                     <Text style={[d.text, { fontWeight:'bold', fontSize:15 }]}>{item.marca} {item.modelo}</Text>
-                    <Text style={d.sub}>
-                      {item.fases === 1 ? 'Monofásico' : 'Trifásico'} {item.v_ac}V
-                      {'  •  '}{item.num_mppt} MPPT  •  {item.imax_por_mppt}A/MPPT  •  Vmax {item.max_dc_volts}V
-                    </Text>
+                    <Text style={d.sub}>{item.fases === 1 ? 'Monofásico' : 'Trifásico'} {item.v_ac}V{'  •  '}{item.num_mppt} MPPT  •  {item.imax_por_mppt}A/MPPT  •  Vmax {item.max_dc_volts}V</Text>
                   </View>
                   <View style={{ alignItems:'center' }}>
                     <Text style={{ fontSize:13, fontWeight:'bold', color:'#10B981' }}>${item.precio_mxn.toLocaleString()}</Text>
@@ -491,7 +542,7 @@ export default function ProCalculator() {
   );
 }
 
-// ─ Mini-componentes ────────────────────────────────────────────────────────────
+// ─ Mini-componentes ──────────────────────────────────────────────────────────
 const Divider = () => <View style={{ height:1, backgroundColor:'#CBD5E1', marginVertical:14 }} />;
 
 const Chip = ({ icon, color, num, label }: any) => (
@@ -576,6 +627,9 @@ const s = StyleSheet.create({
   inversorCard:  { flexDirection:'row', alignItems:'center', borderWidth:2, borderRadius:10, padding:14, marginBottom:8 },
   costoFila:     { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
   totalRow:      { flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderTopWidth:1, marginTop:6, paddingTop:8 },
+  roiPreview:    { borderWidth:1, borderRadius:10, padding:14, marginTop:14 },
+  roiRow:        { flexDirection:'row', justifyContent:'space-between' },
+  roiChip:       { flex:1, alignItems:'center', marginHorizontal:3 },
   modalOverlay:  { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
   modalBox:      { borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'82%' },
   modalHeader:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 },
