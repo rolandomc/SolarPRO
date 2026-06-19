@@ -1,8 +1,9 @@
 // app/history.tsx
-import React, { useState, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  FlatList, Alert, Modal, ScrollView
+  FlatList, Alert, Modal, ScrollView,
+  Animated, PanResponder, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,10 @@ import { ThemeContext } from './_layout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { generarCotizacionProfesional } from '../utils/pdfGenerator';
+
+const SCREEN_W = Dimensions.get('window').width;
+const SWIPE_THRESHOLD = 80;   // px para revelar el botón
+const DELETE_BTN_W    = 90;   // ancho del botón rojo
 
 type Estado = 'cotizado' | 'aprobado' | 'instalado' | 'cancelado';
 
@@ -33,6 +38,94 @@ const ESTADOS: { key: Estado; label: string; color: string; icon: string }[] = [
 
 const estadoInfo = (e?: Estado) => ESTADOS.find(s => s.key === e) || ESTADOS[0];
 
+// ─── SwipeableRow ────────────────────────────────────────────────────────────
+function SwipeableRow({
+  children,
+  onDelete,
+  onOpen,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+  onOpen: () => void;   // cierra otras filas abiertas
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen     = useRef(false);
+
+  const close = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    isOpen.current = false;
+  };
+
+  const open = () => {
+    onOpen();   // notifica al padre para cerrar otras filas
+    Animated.spring(translateX, { toValue: -DELETE_BTN_W, useNativeDriver: true }).start();
+    isOpen.current = true;
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_, g) => {
+        // Solo deslizamiento hacia la izquierda
+        if (g.dx < 0) {
+          const base = isOpen.current ? -DELETE_BTN_W : 0;
+          const next = Math.max(base + g.dx, -DELETE_BTN_W);
+          translateX.setValue(next);
+        } else if (isOpen.current) {
+          const next = Math.min(-DELETE_BTN_W + g.dx, 0);
+          translateX.setValue(next);
+        }
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -SWIPE_THRESHOLD / 2) {
+          open();
+        } else if (g.dx > SWIPE_THRESHOLD / 2 && isOpen.current) {
+          close();
+        } else if (isOpen.current) {
+          open();
+        } else {
+          close();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={{ overflow: 'hidden', marginBottom: 10 }}>
+      {/* Botón rojo detrás */}
+      <View style={sw.deleteBg}>
+        <TouchableOpacity
+          style={sw.deleteBtn}
+          onPress={() => {
+            close();
+            onDelete();
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="trash" size={26} color="#FFF" />
+          <Text style={sw.deleteTxt}>Eliminar</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Tarjeta encima, se desliza */}
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+const sw = StyleSheet.create({
+  deleteBg:  { position: 'absolute', right: 0, top: 0, bottom: 0, width: DELETE_BTN_W, borderRadius: 12, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+  deleteBtn: { flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
+  deleteTxt: { color: '#FFF', fontSize: 11, fontWeight: 'bold', marginTop: 4 },
+});
+
+// ─── History screen ───────────────────────────────────────────────────────────
 export default function History() {
   const { isDark } = useContext(ThemeContext);
   const router     = useRouter();
@@ -42,6 +135,9 @@ export default function History() {
   const [filtroEstado, setFiltroEstado] = useState<Estado | 'todos'>('todos');
   const [modalCot, setModalCot]         = useState<Cotizacion | null>(null);
   const [notaTemp, setNotaTemp]         = useState('');
+
+  // Ref para cerrar filas abiertas cuando otra se desliza
+  const openRowRef = useRef<(() => void) | null>(null);
 
   useFocusEffect(
     useCallback(() => { cargarHistorial(); }, [])
@@ -128,38 +224,46 @@ export default function History() {
   const renderItem = ({ item }: { item: Cotizacion }) => {
     const est = estadoInfo(item.estado);
     return (
-      <TouchableOpacity
-        style={[h.itemCard, d.card, { borderLeftColor: est.color, borderLeftWidth: 4 }]}
-        onPress={() => { setModalCot(item); setNotaTemp(item.notas || ''); }}
-        activeOpacity={0.75}
+      <SwipeableRow
+        onDelete={() => eliminarCotizacion(item.id)}
+        onOpen={() => {
+          // Cierra la fila que estaba abierta antes
+          if (openRowRef.current) openRowRef.current();
+        }}
       >
-        <View style={{ flex: 1, marginRight: 10 }}>
-          <Text style={[d.text, { fontWeight: 'bold', fontSize: 16 }]} numberOfLines={1}>{item.cliente}</Text>
-          <Text style={[d.sub, { fontSize: 12, marginTop: 2 }]}>{item.fecha}</Text>
-          {item.roi && (
-            <Text style={[d.sub, { fontSize: 12 }]} numberOfLines={1}>
-              {item.roi.potenciaKWp ? `${item.roi.potenciaKWp.toFixed(2)} kWp  •  ` : ''}
-              ROI: {item.roi.roiMeses} meses
-            </Text>
-          )}
-        </View>
-        <View style={h.itemRight}>
-          <Text style={h.itemTotal} numberOfLines={1}>${item.total.toLocaleString()}</Text>
-          <View style={[h.estadoBadge, { backgroundColor: est.color + '22' }]}>
-            <Ionicons name={est.icon as any} size={12} color={est.color} />
-            <Text style={[h.estadoBadgeTxt, { color: est.color }]}>{est.label}</Text>
+        <TouchableOpacity
+          style={[h.itemCard, d.card, { borderLeftColor: est.color, borderLeftWidth: 4, marginBottom: 0 }]}
+          onPress={() => { setModalCot(item); setNotaTemp(item.notas || ''); }}
+          activeOpacity={0.75}
+        >
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={[d.text, { fontWeight: 'bold', fontSize: 16 }]} numberOfLines={1}>{item.cliente}</Text>
+            <Text style={[d.sub, { fontSize: 12, marginTop: 2 }]}>{item.fecha}</Text>
+            {item.roi && (
+              <Text style={[d.sub, { fontSize: 12 }]} numberOfLines={1}>
+                {item.roi.potenciaKWp ? `${item.roi.potenciaKWp.toFixed(2)} kWp  •  ` : ''}
+                ROI: {item.roi.roiMeses} meses
+              </Text>
+            )}
           </View>
-        </View>
-      </TouchableOpacity>
+          <View style={h.itemRight}>
+            <Text style={h.itemTotal} numberOfLines={1}>${item.total.toLocaleString()}</Text>
+            <View style={[h.estadoBadge, { backgroundColor: est.color + '22' }]}>
+              <Ionicons name={est.icon as any} size={12} color={est.color} />
+              <Text style={[h.estadoBadgeTxt, { color: est.color }]}>{est.label}</Text>
+            </View>
+          </View>
+          {/* Hint visual */}
+          <Ionicons name="chevron-back" size={14} color={isDark ? '#475569' : '#CBD5E1'} style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+      </SwipeableRow>
     );
   };
 
   return (
     <SafeAreaView style={[h.root, d.bg]} edges={['top', 'left', 'right']}>
 
-      {/* ── ZONA FIJA: nunca se encoge sin importar cuántos proyectos haya ── */}
       <View style={h.topFixed}>
-
         <View style={h.header}>
           <Text style={[h.title, d.text]}>Historial de Proyectos</Text>
           <Text style={[d.sub, { fontSize: 13 }]}>{lista.length} cotizaciones</Text>
@@ -187,7 +291,6 @@ export default function History() {
           )}
         </View>
 
-        {/* Filtros — altura fija garantizada por topFixed */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -202,7 +305,6 @@ export default function History() {
               Todos
             </Text>
           </TouchableOpacity>
-
           {ESTADOS.map(e => (
             <TouchableOpacity
               key={e.key}
@@ -217,10 +319,13 @@ export default function History() {
           ))}
         </ScrollView>
 
+        {/* Hint de swipe */}
+        <View style={h.swipeHint}>
+          <Ionicons name="arrow-back" size={13} color={isDark ? '#475569' : '#CBD5E1'} />
+          <Text style={[h.swipeHintTxt, { color: isDark ? '#475569' : '#CBD5E1' }]}>Desliza a la izquierda para eliminar</Text>
+        </View>
       </View>
-      {/* ── FIN ZONA FIJA ── */}
 
-      {/* ── ZONA FLEXIBLE: el FlatList crece solo aquí, nunca aplasta lo de arriba ── */}
       {listaFiltrada.length === 0 ? (
         <View style={h.empty}>
           <Ionicons name="folder-open-outline" size={64} color={isDark ? '#334155' : '#CBD5E1'} />
@@ -245,7 +350,6 @@ export default function History() {
         <View style={h.modalOverlay}>
           <View style={[h.modalBox, d.modal]}>
             <ScrollView showsVerticalScrollIndicator={false}>
-
               <View style={h.modalHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={[d.text, { fontWeight: 'bold', fontSize: 18 }]}>{modalCot?.cliente}</Text>
@@ -341,7 +445,6 @@ export default function History() {
                 <Ionicons name="trash-outline" size={18} color="#EF4444" />
                 <Text style={{ color: '#EF4444', fontWeight: 'bold', marginLeft: 6 }}>Eliminar proyecto</Text>
               </TouchableOpacity>
-
             </ScrollView>
           </View>
         </View>
@@ -366,9 +469,7 @@ const RoiMini = ({ label, valor, color }: any) => (
 );
 
 const h = StyleSheet.create({
-  // SafeAreaView ocupa toda la pantalla en columna
   root:           { flex: 1, flexDirection: 'column' },
-  // Zona superior — tamaño natural (wrap), NUNCA se encoge
   topFixed:       { flexShrink: 0 },
   header:         { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title:          { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
@@ -379,10 +480,11 @@ const h = StyleSheet.create({
   filtrosContent: { paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center' },
   filtroBadge:    { flexShrink: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#334155', marginRight: 8 },
   filtroBadgeTxt: { fontSize: 13, fontWeight: 'bold' },
-  // FlatList toma el espacio restante y hace scroll internamente
+  swipeHint:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingBottom: 6, gap: 4 },
+  swipeHintTxt:   { fontSize: 11 },
   flatList:       { flex: 1 },
   empty:          { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  itemCard:       { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  itemCard:       { borderRadius: 12, borderWidth: 1, padding: 14, flexDirection: 'row', alignItems: 'center' },
   itemRight:      { alignItems: 'flex-end', minWidth: 100, flexShrink: 0 },
   itemTotal:      { fontWeight: 'bold', fontSize: 16, color: '#10B981' },
   estadoBadge:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
