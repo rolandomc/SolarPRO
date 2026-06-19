@@ -13,6 +13,8 @@ import {
   obtenerHSPDesdeNasa,
   calcularProtecciones,
   sugerirInversorCompatible,
+  calcularROIConHSP,
+  generarComparativaOpciones,
 } from '../utils/engineering';
 import { PANELES_DB, INVERSORES_DB } from '../data/componentsDB';
 import { useRouter } from 'expo-router';
@@ -28,54 +30,6 @@ const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   return INVERSORES_DB.reduce((p, c) => c.max_dc_input > p.max_dc_input ? c : p);
 };
 
-const PRECIO_KWH_POR_TARIFA: Record<string, number> = {
-  'Residencial': 2.85,
-  'DAC':         2.85,
-  '1':           1.80,
-  '1A':          1.80,
-  'General BT':  3.20,
-  '2':           3.20,
-  '3':           2.50,
-  'General 3F':  2.50,
-  'HM':          1.80,
-  'HM / MT':     1.80,
-  'OM':          2.10,
-  'MT':          1.80,
-};
-
-const calcularROI = (
-  consumoMensualKwh: number,
-  costoTotal: number,
-  tarifa: string,
-  potenciaKWp: number,
-) => {
-  const precioKwh        = PRECIO_KWH_POR_TARIFA[tarifa] ?? 2.85;
-  const kwGeneradosMes   = potenciaKWp * 4.5 * 30 * 0.80;
-  const kwhAhorroDirecto = Math.min(consumoMensualKwh, kwGeneradosMes);
-
-  const ahorroMensual    = Math.round(kwhAhorroDirecto * precioKwh);
-  const ahorroBimestral  = ahorroMensual * 2;
-  const ahorroAnual      = ahorroMensual * 12;
-  const roiMeses         = Math.round(costoTotal / ahorroMensual);
-  const roiAnos          = (roiMeses / 12).toFixed(1);
-  const ahorroTotal25    = ahorroAnual * 25;
-  const gananciaTotal25  = ahorroTotal25 - costoTotal;
-
-  return {
-    potenciaKWp,
-    precioKwh,
-    kwGeneradosMes:   Math.round(kwGeneradosMes),
-    ahorroMensual,
-    ahorroBimestral,
-    ahorroAnual,
-    roiMeses,
-    roiAnos,
-    ahorroTotal25,
-    gananciaTotal25,
-    tarifa,
-  };
-};
-
 export default function ProCalculator() {
   const { isDark } = useContext(ThemeContext);
   const router = useRouter();
@@ -83,6 +37,7 @@ export default function ProCalculator() {
   const [cliente, setCliente]       = useState('');
   const [consumo, setConsumo]       = useState('');
   const [hsp, setHsp]               = useState('');
+  const [hspMeta, setHspMeta]       = useState<any>(null);
   const [panelSelId, setPanelSelId] = useState(PANELES_DB[0].id);
   const [tipoConexion, setTipoConexion] = useState<TipoConexion>({
     tarifa: 'Residencial', fases: 1,
@@ -133,7 +88,24 @@ export default function ProCalculator() {
     const res = await obtenerHSPDesdeNasa();
     if (res.exito && res.hsp) {
       setHsp(res.hsp.toFixed(2));
-      Alert.alert('HSP obtenido', `${res.hsp.toFixed(2)} h pico solar`);
+      const meses = Object.entries(res.hspMensual || {})
+        .filter(([k]) => k !== 'ANN')
+        .map(([mes, val]) => ({ mes, valor: Number(val) }));
+      const peor = meses.length ? meses.reduce((a, b) => a.valor < b.valor ? a : b) : null;
+      const mejor = meses.length ? meses.reduce((a, b) => a.valor > b.valor ? a : b) : null;
+      setHspMeta({
+        ciudad: res.ciudad,
+        lat: res.lat,
+        lon: res.lon,
+        anual: res.hsp,
+        meses,
+        peor,
+        mejor,
+      });
+      Alert.alert(
+        'HSP obtenido',
+        `${res.hsp.toFixed(2)} h pico solar${res.ciudad ? `\n${res.ciudad}` : ''}`
+      );
     } else Alert.alert('Error GPS', res.error);
   };
 
@@ -158,7 +130,7 @@ export default function ProCalculator() {
     const costoInstalacion = Math.round(potenciaKW * 1000 * 8);
     const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
 
-    const roi = calcularROI(cons, costoTotal, tipoConexion.tarifa, potenciaKW);
+    const roi = calcularROIConHSP(cons, costoTotal, tipoConexion.tarifa, potenciaKW, hspNum);
 
     let compatibles: any[] = [];
     if (st.errores.length > 0) {
@@ -169,6 +141,8 @@ export default function ProCalculator() {
       setInversoresCompatibles([]);
     }
 
+    const comparativa = generarComparativaOpciones(cons, tipoConexion.tarifa, tipoConexion.fases, hspNum, panel);
+
     setResultados({
       numPaneles, potenciaKW, inversor, protecciones,
       panelObj: panel, costoPaneles, costoInversor,
@@ -176,6 +150,8 @@ export default function ProCalculator() {
       hayErrores: st.errores.length > 0,
       compatibles,
       roi,
+      comparativa,
+      hspMeta,
     });
   };
 
@@ -189,7 +165,13 @@ export default function ProCalculator() {
     const costoInversor    = nuevoInversor.precio_mxn;
     const costoInstalacion = Math.round(resultados.potenciaKW * 1000 * 8);
     const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
-    const roi              = calcularROI(parseFloat(consumo), costoTotal, resultados.tipoConexion.tarifa, resultados.potenciaKW);
+    const roi = calcularROIConHSP(
+      parseFloat(consumo),
+      costoTotal,
+      resultados.tipoConexion.tarifa,
+      resultados.potenciaKW,
+      parseFloat(hsp || '4.5')
+    );
     setResultados({
       ...resultados, inversor: nuevoInversor, protecciones, costoInversor,
       costoTotal,
@@ -218,6 +200,23 @@ export default function ProCalculator() {
     });
   };
 
+  const cotizarOpcion = (op: any) => {
+    const nc = cliente.trim() || 'Cliente';
+    const items = JSON.stringify([
+      { id:'1', descripcion:`Panel ${op.panel.marca} ${op.panel.modelo}`, cantidad: String(op.numPaneles), precio: String(op.panel.precio_mxn) },
+      { id:'2', descripcion:`Inversor ${op.inversor.marca} ${op.inversor.modelo}`, cantidad:'1', precio: String(op.inversor.precio_mxn) },
+      { id:'3', descripcion:`Instalación ${op.potenciaKWp.toFixed(2)} kWp`, cantidad:'1', precio: String(op.costoInstalacion) },
+    ]);
+    router.push({
+      pathname: '/quotes',
+      params: {
+        clienteParam: nc,
+        itemsParam:   items,
+        roiParam:     JSON.stringify(op.roi),
+      },
+    });
+  };
+
   const d = {
     bg:    { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' },
     text:  { color: isDark ? '#F1F5F9' : '#0F172A' },
@@ -228,6 +227,8 @@ export default function ProCalculator() {
   };
 
   const st = resultados?.protecciones?.strings;
+  const hspNivel = (v: number) => v < 4 ? { txt:'Bajo', color:'#EF4444' } : v < 5.5 ? { txt:'Bueno', color:'#F59E0B' } : { txt:'Excelente', color:'#10B981' };
+  const nivel = hspMeta?.anual ? hspNivel(hspMeta.anual) : null;
 
   return (
     <SafeAreaView style={[{ flex:1 }, d.bg]} edges={['top','left','right']}>
@@ -260,6 +261,27 @@ export default function ProCalculator() {
                 placeholderTextColor={isDark?'#64748B':'#94A3B8'}
                 value={hsp} onChangeText={setHsp} />
             </View>
+
+            {hspMeta && (
+              <View style={[s.hspCard, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
+                <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+                  <View style={{ flex:1 }}>
+                    <Text style={[d.text, { fontWeight:'bold', fontSize:14 }]}>Radiación solar por ubicación</Text>
+                    <Text style={[d.sub, { fontSize:12, marginTop:2 }]}>{hspMeta.ciudad || `${hspMeta.lat.toFixed(4)}, ${hspMeta.lon.toFixed(4)}`}</Text>
+                  </View>
+                  {nivel && (
+                    <View style={[s.badgePill, { backgroundColor: `${nivel.color}22` }]}>
+                      <Text style={{ color:nivel.color, fontWeight:'bold', fontSize:11 }}>{nivel.txt}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={s.hspStatsRow}>
+                  <MiniStat label="HSP anual" val={hspMeta.anual.toFixed(2)} color="#F59E0B" />
+                  <MiniStat label="Mejor mes" val={hspMeta.mejor ? `${hspMeta.mejor.mes} ${hspMeta.mejor.valor.toFixed(2)}` : '-'} color="#10B981" />
+                  <MiniStat label="Peor mes" val={hspMeta.peor ? `${hspMeta.peor.mes} ${hspMeta.peor.valor.toFixed(2)}` : '-'} color="#EF4444" />
+                </View>
+              </View>
+            )}
 
             <Text style={[s.label, d.text, { marginTop:8 }]}>Tipo de suministro eléctrico:</Text>
             <TouchableOpacity style={[s.selector, d.card, {
@@ -417,6 +439,7 @@ export default function ProCalculator() {
                     <Ionicons name="trending-up" size={20} color="#10B981" />
                     <Text style={[d.text, { fontWeight:'bold', fontSize:14, marginLeft:6 }]}>Retorno de Inversión</Text>
                   </View>
+                  <Text style={[d.sub, { fontSize:12, marginBottom:10 }]}>Calculado con HSP real: {resultados.roi.hspUsado?.toFixed?.(2) || hsp} hsp</Text>
                   <View style={s.roiRow}>
                     <View style={s.roiChip}>
                       <Text style={[d.sub, { fontSize:11 }]}>Ahorro/bimestre</Text>
@@ -432,6 +455,44 @@ export default function ProCalculator() {
                     </View>
                   </View>
                 </View>
+              )}
+
+              {resultados.comparativa?.length > 0 && (
+                <>
+                  <Divider />
+                  <Text style={[s.secLabel, d.text]}>Comparador de Opciones</Text>
+                  <Text style={[d.sub, { fontSize:12, marginBottom:10 }]}>Mismo consumo y misma ubicación solar, con distintas configuraciones del sistema.</Text>
+                  {resultados.comparativa.map((op: any) => (
+                    <View key={op.id} style={[s.optionCard, { borderColor: op.color }] }>
+                      <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+                        <View style={{ flexDirection:'row', alignItems:'center', flex:1 }}>
+                          <Ionicons name={op.icono} size={20} color={op.color} />
+                          <Text style={[d.text, { fontWeight:'bold', fontSize:15, marginLeft:8 }]}>{op.etiqueta}</Text>
+                        </View>
+                        <View style={[s.badgePill, { backgroundColor: op.cumpleNorm ? '#10B98122' : '#EF444422' }]}>
+                          <Text style={{ color: op.cumpleNorm ? '#10B981' : '#EF4444', fontWeight:'bold', fontSize:11 }}>
+                            {op.cumpleNorm ? 'NOM OK' : 'Revisar'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={s.optionGrid}>
+                        <MiniStat label="Total" val={`$${Math.round(op.costoTotal/1000)}k`} color={op.color} />
+                        <MiniStat label="Potencia" val={`${op.potenciaKWp.toFixed(2)} kWp`} color="#0EA5E9" />
+                        <MiniStat label="ROI" val={`${op.roi.roiMeses} meses`} color="#10B981" />
+                      </View>
+
+                      <Text style={[d.sub, { fontSize:12 }]}>• {op.numPaneles} paneles {op.panel.marca} {op.panel.modelo}</Text>
+                      <Text style={[d.sub, { fontSize:12 }]}>• Inversor {op.inversor.marca} {op.inversor.modelo}</Text>
+                      <Text style={[d.sub, { fontSize:12, marginBottom:10 }]}>• Ahorro anual estimado: ${op.roi.ahorroAnual.toLocaleString()}</Text>
+
+                      <TouchableOpacity style={[s.quoteOptionBtn, { backgroundColor: op.color }]} onPress={() => cotizarOpcion(op)}>
+                        <Ionicons name="document-text-outline" size={18} color="#FFF" />
+                        <Text style={s.quoteOptionTxt}>Cotizar esta opción</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </>
               )}
 
               <TouchableOpacity style={[s.calcBtn, { backgroundColor:'#0EA5E9', marginTop:20 }]} onPress={enviarACotizacion}>
@@ -477,9 +538,7 @@ export default function ProCalculator() {
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
             <ModalHeader title="Tipo de Suministro Eléctrico" onClose={() => setModalFases(false)} d={d} />
-            <Text style={[{ fontSize:13, marginBottom:12, color:'#64748B' }]}>
-              Detectado automáticamente del recibo CFE. Puedes cambiarlo si es necesario.
-            </Text>
+            <Text style={[{ fontSize:13, marginBottom:12, color:'#64748B' }]}>Detectado automáticamente del recibo CFE. Puedes cambiarlo si es necesario.</Text>
             {opcionesFases.map((op, idx) => (
               <TouchableOpacity key={idx} style={[s.listItem, {
                 borderColor: tipoConexion.tarifa === op.tarifa ? '#10B981' : (isDark?'#334155':'#E2E8F0'),
@@ -564,6 +623,12 @@ const ModalHeader = ({ title, onClose, d }: any) => (
     </TouchableOpacity>
   </View>
 );
+const MiniStat = ({ label, val, color }: any) => (
+  <View style={s.miniStat}>
+    <Text style={[s.miniVal, { color }]}>{val}</Text>
+    <Text style={s.miniLabel}>{label}</Text>
+  </View>
+);
 
 const s = StyleSheet.create({
   container:     { padding:20, paddingBottom:50 },
@@ -579,6 +644,9 @@ const s = StyleSheet.create({
   selector:      { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:15 },
   calcBtn:       { backgroundColor:'#10B981', padding:16, borderRadius:8, alignItems:'center', marginTop:10, flexDirection:'row', justifyContent:'center' },
   conexionBadge: { flexDirection:'row', alignItems:'center', padding:12, borderRadius:8, borderWidth:1, marginBottom:14 },
+  hspCard:       { borderWidth:1, borderRadius:10, padding:12, marginBottom:14, backgroundColor:'rgba(245,158,11,0.05)' },
+  hspStatsRow:   { flexDirection:'row', justifyContent:'space-between', marginTop:10 },
+  badgePill:     { paddingHorizontal:8, paddingVertical:4, borderRadius:999 },
   chips:         { flexDirection:'row', justifyContent:'space-between', marginBottom:10 },
   chip:          { flex:1, alignItems:'center', backgroundColor:'rgba(14,165,233,0.08)', borderRadius:10, padding:10, marginHorizontal:3 },
   chipNum:       { fontSize:18, fontWeight:'bold', marginTop:3 },
@@ -609,6 +677,13 @@ const s = StyleSheet.create({
   roiPreview:    { borderWidth:1, borderRadius:10, padding:14, marginTop:14 },
   roiRow:        { flexDirection:'row', justifyContent:'space-between' },
   roiChip:       { flex:1, alignItems:'center', marginHorizontal:3 },
+  miniStat:      { flex:1, alignItems:'center', padding:6 },
+  miniVal:       { fontSize:14, fontWeight:'bold', textAlign:'center' },
+  miniLabel:     { fontSize:11, color:'#64748B', textAlign:'center', marginTop:2 },
+  optionCard:    { borderWidth:1.5, borderRadius:12, padding:14, marginBottom:12, backgroundColor:'rgba(255,255,255,0.02)' },
+  optionGrid:    { flexDirection:'row', justifyContent:'space-between', marginTop:10, marginBottom:10 },
+  quoteOptionBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:8, marginTop:4 },
+  quoteOptionTxt:{ color:'#FFF', fontWeight:'bold', marginLeft:8 },
   modalOverlay:  { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
   modalBox:      { borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'82%' },
   modalHeader:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 },
