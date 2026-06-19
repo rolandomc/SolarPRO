@@ -109,7 +109,7 @@ export default function Index() {
     const energiaDiaria      = (consumo / 30) * 1.20 * pct;
     const potenciaArregloKW  = energiaDiaria / HSP_DEFAULT;
     const numPaneles         = Math.ceil((potenciaArregloKW * 1000) / panelW);
-    const potenciaInstalada  = (numPaneles * panelW) / 1000;          // kWp real
+    const potenciaInstalada  = (numPaneles * panelW) / 1000;
     const inversorMin        = potenciaInstalada * 0.9;
     const produccionMensual  = potenciaInstalada * HSP_DEFAULT * 30 * 0.8;
     const ahorroMensual      = produccionMensual * tarifa;
@@ -118,6 +118,22 @@ export default function Index() {
     const ahorroAnual        = ahorroMensual * 12;
     const ganancia25         = ahorroAnual * 25 - costoEstimado;
     const cobertura          = Math.min(100, Math.round((produccionMensual / consumo) * 100));
+
+    // ✅ ROI completo con TODOS los campos que quotes.tsx necesita
+    const roiCompleto = {
+      ahorroAnual,
+      ahorroBimestral:  ahorroMensual * 2,
+      ahorroMensual,
+      roiMeses:         Math.round(roiMeses),
+      roiAnos:          (roiMeses / 12).toFixed(1),
+      gananciaTotal25:  ganancia25,
+      ahorroTotal25:    ahorroAnual * 25,
+      potenciaKWp:      potenciaInstalada,
+      hspUsado:         HSP_DEFAULT,
+      tarifa:           tarifaKey === 'MANUAL' ? 'Manual' : tarifaActiva.label,
+      precioKwh:        tarifaFinal,
+      kwGeneradosMes:   produccionMensual,
+    };
 
     setResultados({
       numPaneles,
@@ -131,6 +147,7 @@ export default function Index() {
       cobertura,
       tarifa,
       produccionMensual,
+      roi: roiCompleto,  // ✅ ROI completo incluido
     });
   };
 
@@ -153,15 +170,8 @@ export default function Index() {
       { id: '2', descripcion: `Inversor ${resultados.inversorMin.toFixed(1)} kW`, cantidad: '1', precio: String(Math.round(resultados.costoEstimado * 0.25)) },
       { id: '3', descripcion: `Instalación y materiales ${resultados.potenciaInstalada.toFixed(2)} kWp`, cantidad: '1', precio: String(Math.round(resultados.costoEstimado * 0.20)) },
     ]);
-    const roiParam = JSON.stringify({
-      ahorroAnual:      resultados.ahorroAnual,
-      ahorroBimestral:  resultados.ahorroMensual * 2,
-      ahorroMensual:    resultados.ahorroMensual,
-      roiMeses:         Math.round(resultados.roiMeses),
-      gananciaTotal25:  resultados.ganancia25,
-      potenciaKWp:      resultados.potenciaInstalada,
-      hspUsado:         HSP_DEFAULT,
-    });
+    // ✅ Pasamos roiCompleto directamente — sin campos faltantes
+    const roiParam = JSON.stringify(resultados.roi);
     router.push({
       pathname: '/quotes',
       params: { clienteParam: cliente || 'Cliente', itemsParam: items, roiParam },
@@ -364,7 +374,6 @@ export default function Index() {
                   <Text style={{ fontWeight: 'bold', fontSize: 14, color: row.color }}>{row.val}</Text>
                 </View>
               ))}
-              {/* Progreso visual del ROI — 25 años = 100% */}
               <View style={{ marginTop: 6 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={[d.sub, { fontSize: 11 }]}>0</Text>
@@ -372,7 +381,6 @@ export default function Index() {
                   <Text style={[d.sub, { fontSize: 11 }]}>25 años</Text>
                 </View>
                 <View style={s.progressBg}>
-                  {/* Zona roja: 0 → ROI */}
                   <View style={[s.progressFill, {
                     width: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`,
                     backgroundColor: '#EF4444',
@@ -380,7 +388,6 @@ export default function Index() {
                   }]} />
                 </View>
                 <View style={s.progressBg}>
-                  {/* Zona verde: ROI → 25 años */}
                   <View style={[s.progressFill, {
                     marginLeft: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`,
                     width: `${Math.max(0, 100 - (resultados.roiMeses / (25 * 12)) * 100)}%`,
@@ -401,7 +408,6 @@ export default function Index() {
               </View>
             </View>
 
-            {/* Nota de tarifa usada */}
             <Text style={[d.sub, { fontSize: 12, textAlign: 'center', marginTop: 4 }]}>
               Tarifa usada: <Text style={{ fontWeight: 'bold', color: tarifaActiva.color }}>${resultados.tarifa.toFixed(2)}/kWh</Text>
               {'  ·  '}HSP: <Text style={{ fontWeight: 'bold', color: d.text.color }}>{HSP_DEFAULT} h</Text>
@@ -421,7 +427,6 @@ export default function Index() {
           </View>
         )}
 
-        {/* Banner PRO si no hay resultados aún */}
         {!resultados && (
           <TouchableOpacity style={[s.proBanner, { borderColor: isDark ? '#334155' : '#E2E8F0', backgroundColor: isDark ? '#1E293B' : '#FFF' }]} onPress={() => router.push('/pro-calculator')}>
             <View style={s.proBannerIcon}>

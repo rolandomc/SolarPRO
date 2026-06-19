@@ -1,5 +1,5 @@
 // app/pro-calculator.tsx
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, FlatList, Modal
@@ -17,7 +17,7 @@ import {
   generarComparativaOpciones,
 } from '../utils/engineering';
 import { PANELES_DB, INVERSORES_DB } from '../data/componentsDB';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   const w = potenciaKW * 1000;
@@ -33,6 +33,8 @@ const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
 export default function ProCalculator() {
   const { isDark } = useContext(ThemeContext);
   const router = useRouter();
+  // ✅ Leer params enviados desde la calculadora básica
+  const params = useLocalSearchParams();
 
   const [cliente, setCliente]       = useState('');
   const [consumo, setConsumo]       = useState('');
@@ -48,6 +50,16 @@ export default function ProCalculator() {
   const [modalFases, setModalFases]           = useState(false);
   const [inversoresCompatibles, setInversoresCompatibles] = useState<any[]>([]);
   const [resultados, setResultados] = useState<any>(null);
+
+  // ✅ Precargar consumo y cliente si vienen de la calculadora básica
+  useEffect(() => {
+    if (params.consumoParam) {
+      setConsumo(String(params.consumoParam));
+    }
+    if (params.clienteParam) {
+      setCliente(String(params.clienteParam));
+    }
+  }, [params.consumoParam, params.clienteParam]);
 
   const panelSel = PANELES_DB.find(p => p.id === panelSelId) || PANELES_DB[0];
 
@@ -235,6 +247,16 @@ export default function ProCalculator() {
       <ScrollView style={d.bg}>
         <View style={s.container}>
           <Text style={[s.title, d.text]}>Dimensionamiento Profesional</Text>
+
+          {/* Banner de datos precargados */}
+          {(params.consumoParam || params.clienteParam) && (
+            <View style={[s.precargadoBanner, { backgroundColor: isDark ? 'rgba(14,165,233,0.1)' : 'rgba(14,165,233,0.06)', borderColor: '#0EA5E9' }]}>
+              <Ionicons name="information-circle" size={18} color="#0EA5E9" />
+              <Text style={{ color: '#0EA5E9', fontSize: 13, marginLeft: 8, flex: 1 }}>
+                Datos precargados desde calculadora básica{params.clienteParam ? ` — ${params.clienteParam}` : ''}
+              </Text>
+            </View>
+          )}
 
           <View style={s.row2}>
             <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#8B5CF6' }]} onPress={escanearPDF}>
@@ -631,61 +653,62 @@ const MiniStat = ({ label, val, color }: any) => (
 );
 
 const s = StyleSheet.create({
-  container:     { padding:20, paddingBottom:50 },
-  title:         { fontSize:20, fontWeight:'bold', marginBottom:12 },
-  normaNote:     { fontSize:11, marginBottom:14, fontStyle:'italic' },
-  secLabel:      { fontSize:15, fontWeight:'bold', marginBottom:8 },
-  label:         { fontSize:14, fontWeight:'bold', marginBottom:5 },
-  row2:          { flexDirection:'row', justifyContent:'space-between', marginBottom:16 },
-  actionBtn:     { width:'48%', flexDirection:'row', padding:12, borderRadius:8, justifyContent:'center', alignItems:'center' },
-  btnTxt:        { color:'#FFF', fontWeight:'bold', marginLeft:8 },
-  card:          { padding:20, borderRadius:12, borderWidth:1 },
-  input:         { borderWidth:1, borderRadius:8, padding:12, fontSize:16 },
-  selector:      { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:15 },
-  calcBtn:       { backgroundColor:'#10B981', padding:16, borderRadius:8, alignItems:'center', marginTop:10, flexDirection:'row', justifyContent:'center' },
-  conexionBadge: { flexDirection:'row', alignItems:'center', padding:12, borderRadius:8, borderWidth:1, marginBottom:14 },
-  hspCard:       { borderWidth:1, borderRadius:10, padding:12, marginBottom:14, backgroundColor:'rgba(245,158,11,0.05)' },
-  hspStatsRow:   { flexDirection:'row', justifyContent:'space-between', marginTop:10 },
-  badgePill:     { paddingHorizontal:8, paddingVertical:4, borderRadius:999 },
-  chips:         { flexDirection:'row', justifyContent:'space-between', marginBottom:10 },
-  chip:          { flex:1, alignItems:'center', backgroundColor:'rgba(14,165,233,0.08)', borderRadius:10, padding:10, marginHorizontal:3 },
-  chipNum:       { fontSize:18, fontWeight:'bold', marginTop:3 },
-  chipLabel:     { fontSize:11, color:'#64748B', marginTop:2 },
-  stringDiagram: { flexDirection:'row', alignItems:'center', justifyContent:'center', marginBottom:12 },
-  strBox:        { alignItems:'center', backgroundColor:'rgba(14,165,233,0.08)', borderRadius:10, padding:12, minWidth:78 },
-  strNum:        { fontSize:26, fontWeight:'bold', color:'#0EA5E9' },
-  strLabel:      { fontSize:10, color:'#64748B', textAlign:'center', marginTop:3, lineHeight:15 },
-  op:            { fontSize:22, fontWeight:'bold', marginHorizontal:6 },
-  mpptDist:      { borderWidth:1, borderRadius:8, padding:10, marginBottom:10 },
-  mpptDistTitle: { fontSize:12, marginBottom:6 },
-  tabla:         { borderWidth:1, borderRadius:8, overflow:'hidden', marginBottom:10 },
-  tabFila:       { flexDirection:'row', alignItems:'center', paddingHorizontal:12, paddingVertical:8 },
-  tabKey:        { flex:3, fontSize:12 },
-  tabVal:        { flex:2, fontSize:13, fontWeight:'bold', textAlign:'right' },
-  badge:         { marginLeft:8, paddingHorizontal:6, paddingVertical:2, borderRadius:4 },
-  badgeTxt:      { fontSize:11, fontWeight:'bold' },
-  errorBox:      { backgroundColor:'rgba(239,68,68,0.08)', borderWidth:1, borderColor:'#EF4444', borderRadius:8, padding:12, marginBottom:10 },
-  errorTitle:    { color:'#EF4444', fontWeight:'bold', fontSize:14, marginBottom:6 },
-  errorTxt:      { color:'#EF4444', fontSize:13, marginBottom:2 },
-  cambiarBtn:    { flexDirection:'row', alignItems:'center', backgroundColor:'#EF4444', padding:10, borderRadius:8, marginTop:10, justifyContent:'center' },
-  cambiarBtnTxt: { color:'#FFF', fontWeight:'bold', marginLeft:8, fontSize:13 },
-  alertBox:      { backgroundColor:'rgba(245,158,11,0.08)', borderWidth:1, borderColor:'#F59E0B', borderRadius:8, padding:12, marginBottom:10 },
-  alertTxt:      { color:'#D97706', fontSize:13, marginBottom:2 },
-  inversorCard:  { flexDirection:'row', alignItems:'center', borderWidth:2, borderRadius:10, padding:14, marginBottom:8 },
-  costoFila:     { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
-  totalRow:      { flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderTopWidth:1, marginTop:6, paddingTop:8 },
-  roiPreview:    { borderWidth:1, borderRadius:10, padding:14, marginTop:14 },
-  roiRow:        { flexDirection:'row', justifyContent:'space-between' },
-  roiChip:       { flex:1, alignItems:'center', marginHorizontal:3 },
-  miniStat:      { flex:1, alignItems:'center', padding:6 },
-  miniVal:       { fontSize:14, fontWeight:'bold', textAlign:'center' },
-  miniLabel:     { fontSize:11, color:'#64748B', textAlign:'center', marginTop:2 },
-  optionCard:    { borderWidth:1.5, borderRadius:12, padding:14, marginBottom:12, backgroundColor:'rgba(255,255,255,0.02)' },
-  optionGrid:    { flexDirection:'row', justifyContent:'space-between', marginTop:10, marginBottom:10 },
-  quoteOptionBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:8, marginTop:4 },
-  quoteOptionTxt:{ color:'#FFF', fontWeight:'bold', marginLeft:8 },
-  modalOverlay:  { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
-  modalBox:      { borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'82%' },
-  modalHeader:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 },
-  listItem:      { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:10 },
+  container:       { padding:20, paddingBottom:50 },
+  title:           { fontSize:20, fontWeight:'bold', marginBottom:12 },
+  normaNote:       { fontSize:11, marginBottom:14, fontStyle:'italic' },
+  secLabel:        { fontSize:15, fontWeight:'bold', marginBottom:8 },
+  label:           { fontSize:14, fontWeight:'bold', marginBottom:5 },
+  row2:            { flexDirection:'row', justifyContent:'space-between', marginBottom:16 },
+  actionBtn:       { width:'48%', flexDirection:'row', padding:12, borderRadius:8, justifyContent:'center', alignItems:'center' },
+  btnTxt:          { color:'#FFF', fontWeight:'bold', marginLeft:8 },
+  card:            { padding:20, borderRadius:12, borderWidth:1 },
+  input:           { borderWidth:1, borderRadius:8, padding:12, fontSize:16 },
+  selector:        { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:15 },
+  calcBtn:         { backgroundColor:'#10B981', padding:16, borderRadius:8, alignItems:'center', marginTop:10, flexDirection:'row', justifyContent:'center' },
+  conexionBadge:   { flexDirection:'row', alignItems:'center', padding:12, borderRadius:8, borderWidth:1, marginBottom:14 },
+  hspCard:         { borderWidth:1, borderRadius:10, padding:12, marginBottom:14, backgroundColor:'rgba(245,158,11,0.05)' },
+  hspStatsRow:     { flexDirection:'row', justifyContent:'space-between', marginTop:10 },
+  badgePill:       { paddingHorizontal:8, paddingVertical:4, borderRadius:999 },
+  chips:           { flexDirection:'row', justifyContent:'space-between', marginBottom:10 },
+  chip:            { flex:1, alignItems:'center', backgroundColor:'rgba(14,165,233,0.08)', borderRadius:10, padding:10, marginHorizontal:3 },
+  chipNum:         { fontSize:18, fontWeight:'bold', marginTop:3 },
+  chipLabel:       { fontSize:11, color:'#64748B', marginTop:2 },
+  stringDiagram:   { flexDirection:'row', alignItems:'center', justifyContent:'center', marginBottom:12 },
+  strBox:          { alignItems:'center', backgroundColor:'rgba(14,165,233,0.08)', borderRadius:10, padding:12, minWidth:78 },
+  strNum:          { fontSize:26, fontWeight:'bold', color:'#0EA5E9' },
+  strLabel:        { fontSize:10, color:'#64748B', textAlign:'center', marginTop:3, lineHeight:15 },
+  op:              { fontSize:22, fontWeight:'bold', marginHorizontal:6 },
+  mpptDist:        { borderWidth:1, borderRadius:8, padding:10, marginBottom:10 },
+  mpptDistTitle:   { fontSize:12, marginBottom:6 },
+  tabla:           { borderWidth:1, borderRadius:8, overflow:'hidden', marginBottom:10 },
+  tabFila:         { flexDirection:'row', alignItems:'center', paddingHorizontal:12, paddingVertical:8 },
+  tabKey:          { flex:3, fontSize:12 },
+  tabVal:          { flex:2, fontSize:13, fontWeight:'bold', textAlign:'right' },
+  badge:           { marginLeft:8, paddingHorizontal:6, paddingVertical:2, borderRadius:4 },
+  badgeTxt:        { fontSize:11, fontWeight:'bold' },
+  errorBox:        { backgroundColor:'rgba(239,68,68,0.08)', borderWidth:1, borderColor:'#EF4444', borderRadius:8, padding:12, marginBottom:10 },
+  errorTitle:      { color:'#EF4444', fontWeight:'bold', fontSize:14, marginBottom:6 },
+  errorTxt:        { color:'#EF4444', fontSize:13, marginBottom:2 },
+  cambiarBtn:      { flexDirection:'row', alignItems:'center', backgroundColor:'#EF4444', padding:10, borderRadius:8, marginTop:10, justifyContent:'center' },
+  cambiarBtnTxt:   { color:'#FFF', fontWeight:'bold', marginLeft:8, fontSize:13 },
+  alertBox:        { backgroundColor:'rgba(245,158,11,0.08)', borderWidth:1, borderColor:'#F59E0B', borderRadius:8, padding:12, marginBottom:10 },
+  alertTxt:        { color:'#D97706', fontSize:13, marginBottom:2 },
+  inversorCard:    { flexDirection:'row', alignItems:'center', borderWidth:2, borderRadius:10, padding:14, marginBottom:8 },
+  costoFila:       { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
+  totalRow:        { flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderTopWidth:1, marginTop:6, paddingTop:8 },
+  roiPreview:      { borderWidth:1, borderRadius:10, padding:14, marginTop:14 },
+  roiRow:          { flexDirection:'row', justifyContent:'space-between' },
+  roiChip:         { flex:1, alignItems:'center', marginHorizontal:3 },
+  miniStat:        { flex:1, alignItems:'center', padding:6 },
+  miniVal:         { fontSize:14, fontWeight:'bold', textAlign:'center' },
+  miniLabel:       { fontSize:11, color:'#64748B', textAlign:'center', marginTop:2 },
+  optionCard:      { borderWidth:1.5, borderRadius:12, padding:14, marginBottom:12, backgroundColor:'rgba(255,255,255,0.02)' },
+  optionGrid:      { flexDirection:'row', justifyContent:'space-between', marginTop:10, marginBottom:10 },
+  quoteOptionBtn:  { flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:8, marginTop:4 },
+  quoteOptionTxt:  { color:'#FFF', fontWeight:'bold', marginLeft:8 },
+  modalOverlay:    { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
+  modalBox:        { borderTopLeftRadius:20, borderTopRightRadius:20, padding:20, maxHeight:'82%' },
+  modalHeader:     { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 },
+  listItem:        { flexDirection:'row', alignItems:'center', padding:14, borderRadius:10, borderWidth:1.5, marginBottom:10 },
+  precargadoBanner:{ flexDirection:'row', alignItems:'center', padding:10, borderRadius:8, borderWidth:1, marginBottom:14 },
 });
