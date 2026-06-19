@@ -18,6 +18,7 @@ import {
 } from '../utils/engineering';
 import { PANELES_DB, INVERSORES_DB } from '../data/componentsDB';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
   const w = potenciaKW * 1000;
@@ -33,7 +34,6 @@ const elegirInversorPorPotenciaYFases = (potenciaKW: number, fases: 1 | 3) => {
 export default function ProCalculator() {
   const { isDark } = useContext(ThemeContext);
   const router = useRouter();
-  // ✅ Leer params enviados desde la calculadora básica
   const params = useLocalSearchParams();
 
   const [cliente, setCliente]       = useState('');
@@ -51,14 +51,14 @@ export default function ProCalculator() {
   const [inversoresCompatibles, setInversoresCompatibles] = useState<any[]>([]);
   const [resultados, setResultados] = useState<any>(null);
 
-  // ✅ Precargar consumo y cliente si vienen de la calculadora básica
+  // ✅ Estados para loading overlay
+  const [loading, setLoading]       = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
+  const [loadingSubMsg, setLoadingSubMsg] = useState('');
+
   useEffect(() => {
-    if (params.consumoParam) {
-      setConsumo(String(params.consumoParam));
-    }
-    if (params.clienteParam) {
-      setCliente(String(params.clienteParam));
-    }
+    if (params.consumoParam) setConsumo(String(params.consumoParam));
+    if (params.clienteParam) setCliente(String(params.clienteParam));
   }, [params.consumoParam, params.clienteParam]);
 
   const panelSel = PANELES_DB.find(p => p.id === panelSelId) || PANELES_DB[0];
@@ -70,55 +70,59 @@ export default function ProCalculator() {
     { tarifa: 'HM / MT',     fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F', voltajeAC: 380 },
   ];
 
+  // ✅ OCR con loading overlay
   const escanearPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
       if (!result.canceled) {
-        Alert.alert('Analizando', 'Extrayendo datos del recibo...');
-        const file = result.assets[0];
-        const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
-        if (r.exito) {
-          if (r.consumo)  setConsumo(r.consumo);
-          if (r.cliente)  setCliente(r.cliente);
-          if (r.tipoConexion) {
-            setTipoConexion(r.tipoConexion);
-            Alert.alert(
-              '✅ Recibo analizado',
-              `Cliente: ${r.cliente || '(no detectado)'}\n` +
-              `Consumo: ${r.consumo} kWh/mes\n` +
-              `Tarifa CFE: ${r.tipoConexion.tarifa}\n` +
-              `Suministro: ${r.tipoConexion.descripcion}\n\n` +
-              `${r.mensaje || ''}`,
-            );
-          }
-        } else Alert.alert('Error OCR', r.error);
+        setLoadingMsg('Leyendo recibo CFE...');
+        setLoadingSubMsg('Extrayendo datos del PDF, un momento...');
+        setLoading(true);
+        try {
+          const file = result.assets[0];
+          const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
+          if (r.exito) {
+            if (r.consumo)  setConsumo(r.consumo);
+            if (r.cliente)  setCliente(r.cliente);
+            if (r.tipoConexion) {
+              setTipoConexion(r.tipoConexion);
+              Alert.alert(
+                '✅ Recibo analizado',
+                `Cliente: ${r.cliente || '(no detectado)'}\n` +
+                `Consumo: ${r.consumo} kWh/mes\n` +
+                `Tarifa CFE: ${r.tipoConexion.tarifa}\n` +
+                `Suministro: ${r.tipoConexion.descripcion}\n\n` +
+                `${r.mensaje || ''}`,
+              );
+            }
+          } else Alert.alert('Error OCR', r.error);
+        } finally {
+          setLoading(false);
+        }
       }
     } catch { Alert.alert('Error', 'Fallo al leer PDF.'); }
   };
 
+  // ✅ HSP NASA con loading overlay
   const obtenerHSP = async () => {
-    const res = await obtenerHSPDesdeNasa();
-    if (res.exito && res.hsp) {
-      setHsp(res.hsp.toFixed(2));
-      const meses = Object.entries(res.hspMensual || {})
-        .filter(([k]) => k !== 'ANN')
-        .map(([mes, val]) => ({ mes, valor: Number(val) }));
-      const peor = meses.length ? meses.reduce((a, b) => a.valor < b.valor ? a : b) : null;
-      const mejor = meses.length ? meses.reduce((a, b) => a.valor > b.valor ? a : b) : null;
-      setHspMeta({
-        ciudad: res.ciudad,
-        lat: res.lat,
-        lon: res.lon,
-        anual: res.hsp,
-        meses,
-        peor,
-        mejor,
-      });
-      Alert.alert(
-        'HSP obtenido',
-        `${res.hsp.toFixed(2)} h pico solar${res.ciudad ? `\n${res.ciudad}` : ''}`
-      );
-    } else Alert.alert('Error GPS', res.error);
+    setLoadingMsg('Consultando NASA POWER...');
+    setLoadingSubMsg('Obteniendo radiación solar por GPS...');
+    setLoading(true);
+    try {
+      const res = await obtenerHSPDesdeNasa();
+      if (res.exito && res.hsp) {
+        setHsp(res.hsp.toFixed(2));
+        const meses = Object.entries(res.hspMensual || {})
+          .filter(([k]) => k !== 'ANN')
+          .map(([mes, val]) => ({ mes, valor: Number(val) }));
+        const peor  = meses.length ? meses.reduce((a, b) => a.valor < b.valor ? a : b) : null;
+        const mejor = meses.length ? meses.reduce((a, b) => a.valor > b.valor ? a : b) : null;
+        setHspMeta({ ciudad: res.ciudad, lat: res.lat, lon: res.lon, anual: res.hsp, meses, peor, mejor });
+        Alert.alert('HSP obtenido', `${res.hsp.toFixed(2)} h pico solar${res.ciudad ? `\n${res.ciudad}` : ''}`);
+      } else Alert.alert('Error GPS', res.error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calcular = () => {
@@ -178,18 +182,14 @@ export default function ProCalculator() {
     const costoInstalacion = Math.round(resultados.potenciaKW * 1000 * 8);
     const costoTotal       = costoPaneles + costoInversor + costoInstalacion;
     const roi = calcularROIConHSP(
-      parseFloat(consumo),
-      costoTotal,
-      resultados.tipoConexion.tarifa,
-      resultados.potenciaKW,
+      parseFloat(consumo), costoTotal,
+      resultados.tipoConexion.tarifa, resultados.potenciaKW,
       parseFloat(hsp || '4.5')
     );
     setResultados({
       ...resultados, inversor: nuevoInversor, protecciones, costoInversor,
-      costoTotal,
-      hayErrores: protecciones.strings.errores.length > 0,
-      compatibles: [],
-      roi,
+      costoTotal, hayErrores: protecciones.strings.errores.length > 0,
+      compatibles: [], roi,
     });
     setInversoresCompatibles([]);
   };
@@ -202,14 +202,7 @@ export default function ProCalculator() {
       { id:'2', descripcion:`Inversor ${resultados.inversor.marca} ${resultados.inversor.modelo}`, cantidad:'1', precio: String(resultados.inversor.precio_mxn) },
       { id:'3', descripcion:`Instalación ${resultados.potenciaKW.toFixed(2)} kWp`, cantidad:'1', precio: String(resultados.costoInstalacion) },
     ]);
-    router.push({
-      pathname: '/quotes',
-      params: {
-        clienteParam: nc,
-        itemsParam:   items,
-        roiParam:     JSON.stringify(resultados.roi),
-      },
-    });
+    router.push({ pathname: '/quotes', params: { clienteParam: nc, itemsParam: items, roiParam: JSON.stringify(resultados.roi) } });
   };
 
   const cotizarOpcion = (op: any) => {
@@ -219,14 +212,7 @@ export default function ProCalculator() {
       { id:'2', descripcion:`Inversor ${op.inversor.marca} ${op.inversor.modelo}`, cantidad:'1', precio: String(op.inversor.precio_mxn) },
       { id:'3', descripcion:`Instalación ${op.potenciaKWp.toFixed(2)} kWp`, cantidad:'1', precio: String(op.costoInstalacion) },
     ]);
-    router.push({
-      pathname: '/quotes',
-      params: {
-        clienteParam: nc,
-        itemsParam:   items,
-        roiParam:     JSON.stringify(op.roi),
-      },
-    });
+    router.push({ pathname: '/quotes', params: { clienteParam: nc, itemsParam: items, roiParam: JSON.stringify(op.roi) } });
   };
 
   const d = {
@@ -248,7 +234,6 @@ export default function ProCalculator() {
         <View style={s.container}>
           <Text style={[s.title, d.text]}>Dimensionamiento Profesional</Text>
 
-          {/* Banner de datos precargados */}
           {(params.consumoParam || params.clienteParam) && (
             <View style={[s.precargadoBanner, { backgroundColor: isDark ? 'rgba(14,165,233,0.1)' : 'rgba(14,165,233,0.06)', borderColor: '#0EA5E9' }]}>
               <Ionicons name="information-circle" size={18} color="#0EA5E9" />
@@ -485,7 +470,7 @@ export default function ProCalculator() {
                   <Text style={[s.secLabel, d.text]}>Comparador de Opciones</Text>
                   <Text style={[d.sub, { fontSize:12, marginBottom:10 }]}>Mismo consumo y misma ubicación solar, con distintas configuraciones del sistema.</Text>
                   {resultados.comparativa.map((op: any) => (
-                    <View key={op.id} style={[s.optionCard, { borderColor: op.color }] }>
+                    <View key={op.id} style={[s.optionCard, { borderColor: op.color }]}>
                       <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
                         <View style={{ flexDirection:'row', alignItems:'center', flex:1 }}>
                           <Ionicons name={op.icono} size={20} color={op.color} />
@@ -497,17 +482,14 @@ export default function ProCalculator() {
                           </Text>
                         </View>
                       </View>
-
                       <View style={s.optionGrid}>
                         <MiniStat label="Total" val={`$${Math.round(op.costoTotal/1000)}k`} color={op.color} />
                         <MiniStat label="Potencia" val={`${op.potenciaKWp.toFixed(2)} kWp`} color="#0EA5E9" />
                         <MiniStat label="ROI" val={`${op.roi.roiMeses} meses`} color="#10B981" />
                       </View>
-
                       <Text style={[d.sub, { fontSize:12 }]}>• {op.numPaneles} paneles {op.panel.marca} {op.panel.modelo}</Text>
                       <Text style={[d.sub, { fontSize:12 }]}>• Inversor {op.inversor.marca} {op.inversor.modelo}</Text>
                       <Text style={[d.sub, { fontSize:12, marginBottom:10 }]}>• Ahorro anual estimado: ${op.roi.ahorroAnual.toLocaleString()}</Text>
-
                       <TouchableOpacity style={[s.quoteOptionBtn, { backgroundColor: op.color }]} onPress={() => cotizarOpcion(op)}>
                         <Ionicons name="document-text-outline" size={18} color="#FFF" />
                         <Text style={s.quoteOptionTxt}>Cotizar esta opción</Text>
@@ -526,6 +508,7 @@ export default function ProCalculator() {
         </View>
       </ScrollView>
 
+      {/* Modales */}
       <Modal visible={modalPaneles} animationType="slide" transparent onRequestClose={() => setModalPaneles(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, d.modal]}>
@@ -604,6 +587,14 @@ export default function ProCalculator() {
           </View>
         </View>
       </Modal>
+
+      {/* ✅ Loading overlay — OCR PDF y HSP NASA */}
+      <LoadingOverlay
+        visible={loading}
+        mensaje={loadingMsg}
+        icono={loadingMsg.includes('NASA') ? 'radio-outline' : 'document-text'}
+        submensaje={loadingSubMsg}
+      />
     </SafeAreaView>
   );
 }
