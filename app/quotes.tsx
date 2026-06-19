@@ -11,27 +11,18 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { generarCotizacionProfesional, ItemCotizacion, RoiData } from '../utils/pdfGenerator';
+import LoadingOverlay from '../components/LoadingOverlay';
 
-// ═══════════════════════════════════════════════════════════════════
 interface Plantilla {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  icono: string;
-  color: string;
-  potencia: string;    // ej. "5.5 kWp"
+  id: string; nombre: string; descripcion: string;
+  icono: string; color: string; potencia: string;
   items: Omit<ItemCotizacion, 'id'>[];
 }
 
-// Plantillas predefinidas — precios MXN referencia 2026
 const PLANTILLAS: Plantilla[] = [
   {
-    id: 't1',
-    nombre: 'Residencial 3 kWp',
-    descripcion: 'Sistema pequeño para casa sin clima',
-    icono: 'home-outline',
-    color: '#10B981',
-    potencia: '3.0 kWp',
+    id: 't1', nombre: 'Residencial 3 kWp', descripcion: 'Sistema pequeño para casa sin clima',
+    icono: 'home-outline', color: '#10B981', potencia: '3.0 kWp',
     items: [
       { descripcion: 'Panel Canadian Solar HiKu6 500W', cantidad: '6',  precio: '2950'  },
       { descripcion: 'Inversor Growatt MIN 3000TL-X2',  cantidad: '1',  precio: '10800' },
@@ -42,12 +33,8 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
   {
-    id: 't2',
-    nombre: 'Residencial 5.5 kWp',
-    descripcion: 'Sistema medio con 1 clima, TV y refrigerador',
-    icono: 'home',
-    color: '#0EA5E9',
-    potencia: '5.5 kWp',
+    id: 't2', nombre: 'Residencial 5.5 kWp', descripcion: 'Sistema medio con 1 clima, TV y refrigerador',
+    icono: 'home', color: '#0EA5E9', potencia: '5.5 kWp',
     items: [
       { descripcion: 'Panel Canadian Solar HiKu6 550W', cantidad: '10', precio: '3200'  },
       { descripcion: 'Inversor Growatt MIN 5000TL-X2',  cantidad: '1',  precio: '15200' },
@@ -58,12 +45,8 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
   {
-    id: 't3',
-    nombre: 'Residencial Premium 8 kWp',
-    descripcion: 'Casa grande con 2+ climas, calentador eléctrico',
-    icono: 'business-outline',
-    color: '#8B5CF6',
-    potencia: '8.0 kWp',
+    id: 't3', nombre: 'Residencial Premium 8 kWp', descripcion: 'Casa grande con 2+ climas, calentador eléctrico',
+    icono: 'business-outline', color: '#8B5CF6', potencia: '8.0 kWp',
     items: [
       { descripcion: 'Panel JA Solar JAM72D40 580W',    cantidad: '14', precio: '3350'  },
       { descripcion: 'Inversor Fronius Primo 8.2-1',    cantidad: '1',  precio: '30000' },
@@ -74,12 +57,8 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
   {
-    id: 't4',
-    nombre: 'Negocio / Comercial 10 kWp',
-    descripcion: 'Local comercial, oficinas, pequeña empresa',
-    icono: 'storefront-outline',
-    color: '#F59E0B',
-    potencia: '10.0 kWp',
+    id: 't4', nombre: 'Negocio / Comercial 10 kWp', descripcion: 'Local comercial, oficinas, pequeña empresa',
+    icono: 'storefront-outline', color: '#F59E0B', potencia: '10.0 kWp',
     items: [
       { descripcion: 'Panel LONGi Hi-MO 6 580W',        cantidad: '18', precio: '3500'  },
       { descripcion: 'Inversor Growatt MOD 10KTL3-X',   cantidad: '1',  precio: '26500' },
@@ -90,12 +69,8 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
   {
-    id: 't5',
-    nombre: 'Industrial 30 kWp',
-    descripcion: 'Empresa mediana, nave industrial, bodega',
-    icono: 'business',
-    color: '#EF4444',
-    potencia: '30.0 kWp',
+    id: 't5', nombre: 'Industrial 30 kWp', descripcion: 'Empresa mediana, nave industrial, bodega',
+    icono: 'business', color: '#EF4444', potencia: '30.0 kWp',
     items: [
       { descripcion: 'Panel Jinko Tiger Neo N-type 580W',cantidad: '52', precio: '3400'  },
       { descripcion: 'Inversor Growatt MOD 30KTL3-X',   cantidad: '1',  precio: '61000' },
@@ -107,29 +82,21 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
   {
-    id: 't6',
-    nombre: 'Híbrido con Batería 5 kWp',
-    descripcion: 'Sistema con respaldo de energía para cortes de luz',
-    icono: 'battery-charging-outline',
-    color: '#06B6D4',
-    potencia: '5.0 kWp',
+    id: 't6', nombre: 'Híbrido con Batería 5 kWp', descripcion: 'Sistema con respaldo de energía para cortes de luz',
+    icono: 'battery-charging-outline', color: '#06B6D4', potencia: '5.0 kWp',
     items: [
-      { descripcion: 'Panel Canadian Solar HiKu6 550W', cantidad: '10', precio: '3200'  },
-      { descripcion: 'Inversor Growatt SPH 5000TL BL-UP',cantidad: '1', precio: '28000' },
-      { descripcion: 'Batería Growatt GBLI6531 (5.1kWh)',cantidad: '1', precio: '35000' },
-      { descripcion: 'Estructura aluminio anodizado',   cantidad: '10', precio: '380'   },
-      { descripcion: 'Cable solar 6mm² (m)',            cantidad: '60', precio: '28'    },
-      { descripcion: 'Caja protecciones DC/AC',         cantidad: '1',  precio: '2500'  },
-      { descripcion: 'Mano de obra e instalación',      cantidad: '1',  precio: '10000' },
+      { descripcion: 'Panel Canadian Solar HiKu6 550W',  cantidad: '10', precio: '3200'  },
+      { descripcion: 'Inversor Growatt SPH 5000TL BL-UP',cantidad: '1',  precio: '28000' },
+      { descripcion: 'Batería Growatt GBLI6531 (5.1kWh)',cantidad: '1',  precio: '35000' },
+      { descripcion: 'Estructura aluminio anodizado',    cantidad: '10', precio: '380'   },
+      { descripcion: 'Cable solar 6mm² (m)',             cantidad: '60', precio: '28'    },
+      { descripcion: 'Caja protecciones DC/AC',          cantidad: '1',  precio: '2500'  },
+      { descripcion: 'Mano de obra e instalación',       cantidad: '1',  precio: '10000' },
     ],
   },
   {
-    id: 't7',
-    nombre: 'SolarEdge Premium 6 kWp',
-    descripcion: 'Con optimizadores por panel, ideal para techos con sombra',
-    icono: 'flash',
-    color: '#F97316',
-    potencia: '6.0 kWp',
+    id: 't7', nombre: 'SolarEdge Premium 6 kWp', descripcion: 'Con optimizadores por panel, ideal para techos con sombra',
+    icono: 'flash', color: '#F97316', potencia: '6.0 kWp',
     items: [
       { descripcion: 'Panel JA Solar JAM66D45 615W N-type', cantidad: '10', precio: '3700'  },
       { descripcion: 'Inversor SolarEdge SE6000H HD-Wave',  cantidad: '1',  precio: '27500' },
@@ -141,7 +108,6 @@ const PLANTILLAS: Plantilla[] = [
     ],
   },
 ];
-// ═══════════════════════════════════════════════════════════════════
 
 export default function Quotes() {
   const { isDark } = useContext(ThemeContext);
@@ -157,6 +123,8 @@ export default function Quotes() {
   const [prec, setPrec]                     = useState('');
   const [roiData, setRoiData]               = useState<RoiData | null>(null);
   const [modalPlantillas, setModalPlantillas] = useState(false);
+  const [loading, setLoading]               = useState(false);
+  const [loadingMsg, setLoadingMsg]         = useState('');
 
   useEffect(() => {
     if (params.clienteParam) {
@@ -180,10 +148,8 @@ export default function Quotes() {
             const historial = JSON.parse(data);
             const cot = historial.find((c: any) => c.id === params.editId);
             if (cot) {
-              setCotizacionId(cot.id);
-              setCliente(cot.cliente);
-              setItems(cot.items || []);
-              setRoiData(cot.roi || null);
+              setCotizacionId(cot.id); setCliente(cot.cliente);
+              setItems(cot.items || []); setRoiData(cot.roi || null);
             }
           }
         } catch {}
@@ -210,40 +176,29 @@ export default function Quotes() {
   const eliminarItem = (id: string) => setItems(items.filter(i => i.id !== id));
   const calcularTotal = () => items.reduce((t, i) => t + parseFloat(i.cantidad) * parseFloat(i.precio), 0);
 
-  // Aplica una plantilla: pregunta si hay items existentes antes de reemplazar
   const aplicarPlantilla = (p: Plantilla) => {
     const aplicar = () => {
-      const nuevosItems: ItemCotizacion[] = p.items.map(it => ({
-        ...it,
-        id: Math.random().toString(),
-      }));
-      setItems(nuevosItems);
+      setItems(p.items.map(it => ({ ...it, id: Math.random().toString() })));
       setModalPlantillas(false);
     };
-
     if (items.length > 0) {
       Alert.alert(
         'Reemplazar componentes',
         `Se reemplazarán los ${items.length} componentes actuales con la plantilla «${p.nombre}». ¿Continuar?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Reemplazar', style: 'destructive', onPress: aplicar },
-        ]
+        [{ text: 'Cancelar', style: 'cancel' }, { text: 'Reemplazar', style: 'destructive', onPress: aplicar }]
       );
-    } else {
-      aplicar();
-    }
+    } else { aplicar(); }
   };
 
   const procesarCotizacion = async () => {
     if (!cliente || items.length === 0) return Alert.alert('Faltan datos', 'Agrega cliente y componentes.');
+    setLoadingMsg('Generando cotización PDF...');
+    setLoading(true);
     try {
       const perfilGuardado = await AsyncStorage.getItem('perfilEmpresa');
       const perfil = perfilGuardado ? JSON.parse(perfilGuardado) : null;
       const total  = calcularTotal();
-
       await generarCotizacionProfesional(cliente, items, total, perfil, roiData);
-
       const historialGuardado = await AsyncStorage.getItem('historialCotizaciones');
       let historial = historialGuardado ? JSON.parse(historialGuardado) : [];
       const nuevaCotizacion = {
@@ -254,13 +209,15 @@ export default function Quotes() {
       };
       if (cotizacionId) {
         historial = historial.map((c: any) => c.id === cotizacionId ? nuevaCotizacion : c);
-        Alert.alert('Éxito', 'Cotización actualizada.');
+        Alert.alert('✅ Éxito', 'Cotización actualizada y PDF generado.');
       } else {
         historial.push(nuevaCotizacion);
+        Alert.alert('✅ Éxito', 'Cotización guardada y PDF generado.');
       }
       await AsyncStorage.setItem('historialCotizaciones', JSON.stringify(historial));
       limpiarFormulario();
     } catch { Alert.alert('Error', 'No se pudo generar la cotización.'); }
+    finally { setLoading(false); }
   };
 
   const ds = {
@@ -275,15 +232,12 @@ export default function Quotes() {
 
   const total = calcularTotal();
 
-  // ─── Render tarjeta de plantilla ───
   const renderPlantilla = ({ item: p }: { item: Plantilla }) => {
     const subtotal = p.items.reduce((s, i) => s + parseFloat(i.cantidad) * parseFloat(i.precio), 0);
     return (
       <TouchableOpacity
         style={[qs.plantillaCard, ds.plantillaCard, { borderLeftColor: p.color, borderLeftWidth: 4 }]}
-        onPress={() => aplicarPlantilla(p)}
-        activeOpacity={0.75}
-      >
+        onPress={() => aplicarPlantilla(p)} activeOpacity={0.75}>
         <View style={[qs.plantillaIcono, { backgroundColor: p.color + '20' }]}>
           <Ionicons name={p.icono as any} size={26} color={p.color} />
         </View>
@@ -302,9 +256,7 @@ export default function Quotes() {
           </View>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: 13, color: p.color, fontWeight: 'bold' }}>
-            ~${Math.round(subtotal / 1000)}k
-          </Text>
+          <Text style={{ fontSize: 13, color: p.color, fontWeight: 'bold' }}>~${Math.round(subtotal / 1000)}k</Text>
           <Ionicons name="chevron-forward" size={18} color={isDark ? '#475569' : '#CBD5E1'} style={{ marginTop: 6 }} />
         </View>
       </TouchableOpacity>
@@ -318,7 +270,6 @@ export default function Quotes() {
         <View style={qs.headerRow}>
           <Text style={[qs.title, ds.text]}>{cotizacionId ? 'Editar Cotización' : 'Nueva Cotización'}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {/* Botón plantillas */}
             <TouchableOpacity style={qs.plantillaBtn} onPress={() => setModalPlantillas(true)}>
               <Ionicons name="copy-outline" size={16} color="#FFF" />
               <Text style={{ color:'#FFF', fontWeight:'bold', fontSize: 13, marginLeft: 4 }}>Plantilla</Text>
@@ -386,13 +337,11 @@ export default function Quotes() {
             <Text style={[ds.sub, { fontSize:12, marginBottom:12 }]}>
               Tarifa CFE: {roiData.tarifa}  •  ${roiData.precioKwh}/kWh  •  Sistema genera ~{roiData.kwGeneradosMes} kWh/mes
             </Text>
-
             <View style={qs.roiChips}>
               <RoiChip icon="calendar"    color="#10B981" titulo="Ahorro bimestral" valor={`$${roiData.ahorroBimestral.toLocaleString()}`} sub="MXN c/2 meses" />
               <RoiChip icon="cash"        color="#0EA5E9" titulo="Ahorro mensual"   valor={`$${roiData.ahorroMensual.toLocaleString()}`}   sub="MXN/mes" />
               <RoiChip icon="stats-chart" color="#F59E0B" titulo="Ahorro anual"     valor={`$${roiData.ahorroAnual.toLocaleString()}`}     sub="MXN/año" />
             </View>
-
             <View style={[qs.roiHighlight, { borderColor:'#0EA5E9', backgroundColor: isDark?'rgba(14,165,233,0.08)':'rgba(14,165,233,0.06)' }]}>
               <Ionicons name="time-outline" size={32} color="#0EA5E9" />
               <View style={{ flex:1, marginLeft:12 }}>
@@ -401,7 +350,6 @@ export default function Quotes() {
                 <Text style={[ds.sub, { fontSize:12 }]}>({roiData.roiAnos} años)</Text>
               </View>
             </View>
-
             <View style={[qs.proyeccionBox, { borderColor: isDark?'#334155':'#E2E8F0' }]}>
               <Text style={[ds.sub, { fontSize:12, marginBottom:6, fontWeight:'bold' }]}>Proyección a 25 años</Text>
               <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:4 }}>
@@ -419,14 +367,13 @@ export default function Quotes() {
                 </Text>
               </View>
             </View>
-
             <Text style={[ds.sub, { fontSize:10, marginTop:10, fontStyle:'italic', textAlign:'center' }]}>
               * Estimado con tarifa CFE {roiData.tarifa} ${roiData.precioKwh}/kWh y factor PR=80%.
             </Text>
           </View>
         )}
 
-        <TouchableOpacity style={qs.pdfBtn} onPress={procesarCotizacion}>
+        <TouchableOpacity style={[qs.pdfBtn, loading && { opacity: 0.7 }]} onPress={procesarCotizacion} disabled={loading}>
           <Ionicons name="save-outline" size={24} color="#FFF" />
           <Text style={{ color:'#FFF', fontWeight:'bold', marginLeft:8, fontSize:16 }}>
             {cotizacionId ? 'Actualizar Cotización' : 'Generar PDF'}
@@ -435,16 +382,10 @@ export default function Quotes() {
 
       </ScrollView>
 
-      {/* ─── Modal de Plantillas ─── */}
-      <Modal
-        visible={modalPlantillas}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setModalPlantillas(false)}
-      >
+      {/* Modal de Plantillas */}
+      <Modal visible={modalPlantillas} animationType="slide" transparent onRequestClose={() => setModalPlantillas(false)}>
         <View style={qs.modalOverlay}>
           <View style={[qs.modalBox, ds.modalBg]}>
-
             <View style={qs.modalHeader}>
               <View>
                 <Text style={[ds.text, { fontSize: 18, fontWeight: 'bold' }]}>Plantillas de sistemas</Text>
@@ -454,16 +395,11 @@ export default function Quotes() {
                 <Ionicons name="close-circle" size={30} color="#94A3B8" />
               </TouchableOpacity>
             </View>
-
             <FlatList
-              data={PLANTILLAS}
-              keyExtractor={p => p.id}
-              renderItem={renderPlantilla}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}
+              data={PLANTILLAS} keyExtractor={p => p.id} renderItem={renderPlantilla}
+              showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}
               ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             />
-
           </View>
         </View>
       </Modal>
@@ -479,6 +415,14 @@ export default function Quotes() {
           </View>
         </BlurView>
       )}
+
+      {/* ✅ Loading overlay PDF */}
+      <LoadingOverlay
+        visible={loading}
+        mensaje={loadingMsg}
+        icono="document-text"
+        submensaje="Preparando tu cotización profesional..."
+      />
     </SafeAreaView>
   );
 }
@@ -509,7 +453,6 @@ const qs = StyleSheet.create({
   roiChip:        { flex:1, alignItems:'center', borderRadius:10, padding:10, marginHorizontal:3 },
   roiHighlight:   { flexDirection:'row', alignItems:'center', borderWidth:1.5, borderRadius:10, padding:14, marginBottom:14 },
   proyeccionBox:  { borderWidth:1, borderRadius:10, padding:12 },
-  // Modal plantillas
   modalOverlay:   { flex:1, backgroundColor:'rgba(0,0,0,0.55)', justifyContent:'flex-end' },
   modalBox:       { borderTopLeftRadius:24, borderTopRightRadius:24, padding:24, maxHeight:'85%' },
   modalHeader:    { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start', marginBottom:18 },

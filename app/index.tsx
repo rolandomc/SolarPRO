@@ -10,19 +10,18 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ThemeContext } from './_layout';
 import { procesarDocumentoOCR } from '../utils/ocrService';
 import { useRouter } from 'expo-router';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ── Tarifas CFE reales (precio promedio MXN/kWh bimestral) ───────────────────
 const TARIFAS_CFE = [
-  { key: 'DAC',        label: 'DAC (Alto consumo)',     tarifa: 5.20, color: '#EF4444' },
-  { key: '1F',         label: 'Residencial 1F',         tarifa: 2.80, color: '#F59E0B' },
-  { key: '1C',         label: 'Residencial 1C (calor)', tarifa: 2.10, color: '#F97316' },
-  { key: 'BT',         label: 'Comercial BT',           tarifa: 3.50, color: '#8B5CF6' },
-  { key: 'MANUAL',     label: 'Capturar manualmente',   tarifa: 0,    color: '#64748B' },
+  { key: 'DAC',    label: 'DAC (Alto consumo)',     tarifa: 5.20, color: '#EF4444' },
+  { key: '1F',     label: 'Residencial 1F',         tarifa: 2.80, color: '#F59E0B' },
+  { key: '1C',     label: 'Residencial 1C (calor)', tarifa: 2.10, color: '#F97316' },
+  { key: 'BT',     label: 'Comercial BT',           tarifa: 3.50, color: '#8B5CF6' },
+  { key: 'MANUAL', label: 'Capturar manualmente',   tarifa: 0,    color: '#64748B' },
 ];
 
-// ── Presets de paneles comunes ──────────────────────────────────────────
 const PANEL_PRESETS = [
   { label: '400W', value: '400' },
   { label: '450W', value: '450' },
@@ -30,16 +29,15 @@ const PANEL_PRESETS = [
   { label: '670W', value: '670' },
 ];
 
-// ── Presets de % ahorro ─────────────────────────────────────────────────
 const AHORRO_PRESETS = [
-  { label: '50%', value: '50' },
-  { label: '75%', value: '75' },
-  { label: '90%', value: '90' },
+  { label: '50%',  value: '50'  },
+  { label: '75%',  value: '75'  },
+  { label: '90%',  value: '90'  },
   { label: '100%', value: '100' },
 ];
 
-const HSP_DEFAULT        = 5.5;
-const COSTO_INSTALACION_W = 20; // MXN/W
+const HSP_DEFAULT         = 5.5;
+const COSTO_INSTALACION_W = 20;
 
 export default function Index() {
   const { isDark } = useContext(ThemeContext);
@@ -53,6 +51,8 @@ export default function Index() {
   const [tarifaManual,     setTarifaManual]     = useState('');
   const [resultados,       setResultados]       = useState<any>(null);
   const [datosOCR,         setDatosOCR]         = useState<any>(null);
+  const [loading,          setLoading]          = useState(false);
+  const [loadingMsg,       setLoadingMsg]       = useState('');
 
   const tarifaActiva = TARIFAS_CFE.find(t => t.key === tarifaKey)!;
   const tarifaFinal  = tarifaKey === 'MANUAL'
@@ -67,7 +67,7 @@ export default function Index() {
     card:  { backgroundColor: isDark ? '#1E293B' : '#FFF', borderColor: isDark ? '#334155' : '#E2E8F0' },
   };
 
-  // ── OCR ──────────────────────────────────────────────────────────────────
+  // ── OCR ─────────────────────────────────────────────────────────────────
   const escanearRecibo = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -75,27 +75,32 @@ export default function Index() {
         copyToCacheDirectory: true,
       });
       if (!result.canceled) {
-        Alert.alert('Analizando', 'Procesando documento CFE...');
-        const file = result.assets[0];
-        const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
-        if (!r.exito) { Alert.alert('Error OCR', r.error); return; }
-        if (r.consumo) {
-          setConsumoMensual(r.consumo);
-          setDatosOCR(r);
-          if (r.cliente) setCliente(r.cliente);
-          if (r.tipoConexion?.tarifa) {
-            const match = TARIFAS_CFE.find(t =>
-              r.tipoConexion.tarifa.toLowerCase().includes(t.key.toLowerCase()));
-            if (match) setTarifaKey(match.key);
+        setLoadingMsg('Leyendo recibo CFE...');
+        setLoading(true);
+        try {
+          const file = result.assets[0];
+          const r = await procesarDocumentoOCR(file.uri, file.name, file.mimeType || 'application/pdf');
+          if (!r.exito) { Alert.alert('Error OCR', r.error); return; }
+          if (r.consumo) {
+            setConsumoMensual(r.consumo);
+            setDatosOCR(r);
+            if (r.cliente) setCliente(r.cliente);
+            if (r.tipoConexion?.tarifa) {
+              const match = TARIFAS_CFE.find(t =>
+                r.tipoConexion.tarifa.toLowerCase().includes(t.key.toLowerCase()));
+              if (match) setTarifaKey(match.key);
+            }
+          } else {
+            Alert.alert('Revisión manual', 'No se encontró el consumo en el formato esperado.');
           }
-        } else {
-          Alert.alert('Revisión manual', 'No se encontró el consumo en el formato esperado.');
+        } finally {
+          setLoading(false);
         }
       }
     } catch { Alert.alert('Error', 'Fallo al seleccionar el archivo.'); }
   };
 
-  // ── Cálculo ────────────────────────────────────────────────────────────────
+  // ── Cálculo ────────────────────────────────────────────────────────────
   const calcularSistema = () => {
     const consumo  = parseFloat(consumoMensual);
     const panelW   = parseFloat(potenciaPanel);
@@ -106,63 +111,49 @@ export default function Index() {
     if (isNaN(panelW)  || panelW <= 0)   return Alert.alert('Datos incompletos', 'Selecciona o ingresa la potencia del panel.');
     if (tarifa <= 0)                     return Alert.alert('Tarifa inválida', 'Ingresa la tarifa CFE en MXN/kWh.');
 
-    const energiaDiaria      = (consumo / 30) * 1.20 * pct;
-    const potenciaArregloKW  = energiaDiaria / HSP_DEFAULT;
-    const numPaneles         = Math.ceil((potenciaArregloKW * 1000) / panelW);
-    const potenciaInstalada  = (numPaneles * panelW) / 1000;
-    const inversorMin        = potenciaInstalada * 0.9;
-    const produccionMensual  = potenciaInstalada * HSP_DEFAULT * 30 * 0.8;
-    const ahorroMensual      = produccionMensual * tarifa;
-    const costoEstimado      = potenciaInstalada * 1000 * COSTO_INSTALACION_W;
-    const roiMeses           = ahorroMensual > 0 ? costoEstimado / ahorroMensual : 0;
-    const ahorroAnual        = ahorroMensual * 12;
-    const ganancia25         = ahorroAnual * 25 - costoEstimado;
-    const cobertura          = Math.min(100, Math.round((produccionMensual / consumo) * 100));
+    const energiaDiaria     = (consumo / 30) * 1.20 * pct;
+    const potenciaArregloKW = energiaDiaria / HSP_DEFAULT;
+    const numPaneles        = Math.ceil((potenciaArregloKW * 1000) / panelW);
+    const potenciaInstalada = (numPaneles * panelW) / 1000;
+    const inversorMin       = potenciaInstalada * 0.9;
+    const produccionMensual = potenciaInstalada * HSP_DEFAULT * 30 * 0.8;
+    const ahorroMensual     = produccionMensual * tarifa;
+    const costoEstimado     = potenciaInstalada * 1000 * COSTO_INSTALACION_W;
+    const roiMeses          = ahorroMensual > 0 ? costoEstimado / ahorroMensual : 0;
+    const ahorroAnual       = ahorroMensual * 12;
+    const ganancia25        = ahorroAnual * 25 - costoEstimado;
+    const cobertura         = Math.min(100, Math.round((produccionMensual / consumo) * 100));
 
-    // ✅ ROI completo con TODOS los campos que quotes.tsx necesita
     const roiCompleto = {
       ahorroAnual,
-      ahorroBimestral:  ahorroMensual * 2,
+      ahorroBimestral: ahorroMensual * 2,
       ahorroMensual,
-      roiMeses:         Math.round(roiMeses),
-      roiAnos:          (roiMeses / 12).toFixed(1),
-      gananciaTotal25:  ganancia25,
-      ahorroTotal25:    ahorroAnual * 25,
-      potenciaKWp:      potenciaInstalada,
-      hspUsado:         HSP_DEFAULT,
-      tarifa:           tarifaKey === 'MANUAL' ? 'Manual' : tarifaActiva.label,
-      precioKwh:        tarifaFinal,
-      kwGeneradosMes:   produccionMensual,
+      roiMeses:        Math.round(roiMeses),
+      roiAnos:         (roiMeses / 12).toFixed(1),
+      gananciaTotal25: ganancia25,
+      ahorroTotal25:   ahorroAnual * 25,
+      potenciaKWp:     potenciaInstalada,
+      hspUsado:        HSP_DEFAULT,
+      tarifa:          tarifaKey === 'MANUAL' ? 'Manual' : tarifaActiva.label,
+      precioKwh:       tarifaFinal,
+      kwGeneradosMes:  produccionMensual,
     };
 
     setResultados({
-      numPaneles,
-      potenciaInstalada,
-      inversorMin,
-      ahorroMensual,
-      ahorroAnual,
-      costoEstimado,
-      roiMeses,
-      ganancia25,
-      cobertura,
-      tarifa,
-      produccionMensual,
-      roi: roiCompleto,  // ✅ ROI completo incluido
+      numPaneles, potenciaInstalada, inversorMin,
+      ahorroMensual, ahorroAnual, costoEstimado,
+      roiMeses, ganancia25, cobertura, tarifa,
+      produccionMensual, roi: roiCompleto,
     });
   };
 
-  // ── Ir a PRO con datos precargados ────────────────────────────────────────────
   const irAPro = () => {
     router.push({
       pathname: '/pro-calculator',
-      params: {
-        consumoParam: consumoMensual,
-        clienteParam: cliente,
-      },
+      params: { consumoParam: consumoMensual, clienteParam: cliente },
     });
   };
 
-  // ── Ir a cotizar ─────────────────────────────────────────────────────────────────
   const irACotizar = () => {
     if (!resultados) return;
     const items = JSON.stringify([
@@ -170,11 +161,9 @@ export default function Index() {
       { id: '2', descripcion: `Inversor ${resultados.inversorMin.toFixed(1)} kW`, cantidad: '1', precio: String(Math.round(resultados.costoEstimado * 0.25)) },
       { id: '3', descripcion: `Instalación y materiales ${resultados.potenciaInstalada.toFixed(2)} kWp`, cantidad: '1', precio: String(Math.round(resultados.costoEstimado * 0.20)) },
     ]);
-    // ✅ Pasamos roiCompleto directamente — sin campos faltantes
-    const roiParam = JSON.stringify(resultados.roi);
     router.push({
       pathname: '/quotes',
-      params: { clienteParam: cliente || 'Cliente', itemsParam: items, roiParam },
+      params: { clienteParam: cliente || 'Cliente', itemsParam: items, roiParam: JSON.stringify(resultados.roi) },
     });
   };
 
@@ -220,36 +209,28 @@ export default function Index() {
         <View style={[s.card, d.card]}>
           <Text style={[s.sectionTitle, d.text]}>Datos del proyecto</Text>
 
-          {/* Cliente */}
           <Text style={[s.label, d.sub]}>Nombre del cliente (opcional)</Text>
           <TextInput
             style={[s.input, d.input, { marginBottom: 14 }]}
             placeholder="Ej. Juan Pérez / Empresa SA"
             placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            value={cliente}
-            onChangeText={setCliente}
+            value={cliente} onChangeText={setCliente}
           />
 
-          {/* Consumo */}
           <Text style={[s.label, d.sub]}>Consumo mensual (kWh)</Text>
           <TextInput
             style={[s.input, d.input, { marginBottom: 14 }]}
             keyboardType="numeric"
             placeholder="Ej. 350"
             placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            value={consumoMensual}
-            onChangeText={setConsumoMensual}
+            value={consumoMensual} onChangeText={setConsumoMensual}
           />
 
-          {/* Tarifa CFE */}
           <Text style={[s.label, d.sub]}>Tarifa CFE</Text>
           <View style={s.presetRow}>
             {TARIFAS_CFE.map(t => (
               <TouchableOpacity key={t.key}
-                style={[s.presetChip, {
-                  borderColor: t.color,
-                  backgroundColor: tarifaKey === t.key ? t.color : 'transparent',
-                }]}
+                style={[s.presetChip, { borderColor: t.color, backgroundColor: tarifaKey === t.key ? t.color : 'transparent' }]}
                 onPress={() => setTarifaKey(t.key)}>
                 <Text style={[s.presetTxt, { color: tarifaKey === t.key ? '#FFF' : t.color }]}>{t.label.split(' ')[0]}</Text>
               </TouchableOpacity>
@@ -265,20 +246,15 @@ export default function Index() {
               keyboardType="decimal-pad"
               placeholder="Tarifa en MXN/kWh (ej. 3.20)"
               placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              value={tarifaManual}
-              onChangeText={setTarifaManual}
+              value={tarifaManual} onChangeText={setTarifaManual}
             />
           )}
 
-          {/* Panel presets */}
           <Text style={[s.label, d.sub]}>Potencia del panel (W)</Text>
           <View style={s.presetRow}>
             {PANEL_PRESETS.map(p => (
               <TouchableOpacity key={p.value}
-                style={[s.presetChip, {
-                  borderColor: '#0EA5E9',
-                  backgroundColor: potenciaPanel === p.value ? '#0EA5E9' : 'transparent',
-                }]}
+                style={[s.presetChip, { borderColor: '#0EA5E9', backgroundColor: potenciaPanel === p.value ? '#0EA5E9' : 'transparent' }]}
                 onPress={() => setPotenciaPanel(p.value)}>
                 <Text style={[s.presetTxt, { color: potenciaPanel === p.value ? '#FFF' : '#0EA5E9' }]}>{p.label}</Text>
               </TouchableOpacity>
@@ -289,19 +265,14 @@ export default function Index() {
             keyboardType="numeric"
             placeholder="O escribe la potencia exacta (W)"
             placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            value={potenciaPanel}
-            onChangeText={setPotenciaPanel}
+            value={potenciaPanel} onChangeText={setPotenciaPanel}
           />
 
-          {/* % Ahorro */}
           <Text style={[s.label, d.sub]}>Porcentaje de ahorro objetivo</Text>
           <View style={s.presetRow}>
             {AHORRO_PRESETS.map(a => (
               <TouchableOpacity key={a.value}
-                style={[s.presetChip, {
-                  borderColor: '#10B981',
-                  backgroundColor: porcentajeAhorro === a.value ? '#10B981' : 'transparent',
-                }]}
+                style={[s.presetChip, { borderColor: '#10B981', backgroundColor: porcentajeAhorro === a.value ? '#10B981' : 'transparent' }]}
                 onPress={() => setPorcentajeAhorro(a.value)}>
                 <Text style={[s.presetTxt, { color: porcentajeAhorro === a.value ? '#FFF' : '#10B981' }]}>{a.label}</Text>
               </TouchableOpacity>
@@ -312,8 +283,7 @@ export default function Index() {
             keyboardType="numeric"
             placeholder="O escribe el % exacto (1-100)"
             placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            value={porcentajeAhorro}
-            onChangeText={setPorcentajeAhorro}
+            value={porcentajeAhorro} onChangeText={setPorcentajeAhorro}
           />
 
           <TouchableOpacity style={s.calcBtn} onPress={calcularSistema}>
@@ -326,16 +296,13 @@ export default function Index() {
         {resultados && (
           <View style={[s.card, d.card, { marginTop: 8 }]}>
             <Text style={[s.sectionTitle, d.text]}>Resultados del sistema</Text>
-
-            {/* KPI grid 2x2 */}
             <View style={s.kpiGrid}>
-              <KPICard icon="sunny"         color="#F59E0B" label="Paneles"       value={String(resultados.numPaneles)}                          sub={`${resultados.potenciaInstalada.toFixed(2)} kWp`} isDark={isDark} />
-              <KPICard icon="hardware-chip" color="#0EA5E9" label="Inversor mín." value={`${resultados.inversorMin.toFixed(1)} kW`}              sub="capacidad mínima"                              isDark={isDark} />
-              <KPICard icon="trending-up"   color="#10B981" label="Ahorro/mes"   value={`$${Math.round(resultados.ahorroMensual).toLocaleString()}`} sub={`$${Math.round(resultados.ahorroAnual).toLocaleString()}/año`}  isDark={isDark} />
-              <KPICard icon="time-outline"  color="#8B5CF6" label="Recuperación" value={`${(resultados.roiMeses / 12).toFixed(1)} años`}         sub={`${Math.round(resultados.roiMeses)} meses`}    isDark={isDark} />
+              <KPICard icon="sunny"         color="#F59E0B" label="Paneles"       value={String(resultados.numPaneles)}                               sub={`${resultados.potenciaInstalada.toFixed(2)} kWp`}          isDark={isDark} />
+              <KPICard icon="hardware-chip" color="#0EA5E9" label="Inversor mín." value={`${resultados.inversorMin.toFixed(1)} kW`}                  sub="capacidad mínima"                                          isDark={isDark} />
+              <KPICard icon="trending-up"   color="#10B981" label="Ahorro/mes"   value={`$${Math.round(resultados.ahorroMensual).toLocaleString()}`}  sub={`$${Math.round(resultados.ahorroAnual).toLocaleString()}/año`} isDark={isDark} />
+              <KPICard icon="time-outline"  color="#8B5CF6" label="Recuperación" value={`${(resultados.roiMeses / 12).toFixed(1)} años`}              sub={`${Math.round(resultados.roiMeses)} meses`}                isDark={isDark} />
             </View>
 
-            {/* Cobertura */}
             <View style={[s.coberturaWrap, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                 <Text style={[d.text, { fontWeight: 'bold', fontSize: 14 }]}>Cobertura solar</Text>
@@ -344,19 +311,14 @@ export default function Index() {
                 </Text>
               </View>
               <View style={s.progressBg}>
-                <View style={[s.progressFill, {
-                  width: `${resultados.cobertura}%`,
-                  backgroundColor: resultados.cobertura >= 90 ? '#10B981' : resultados.cobertura >= 60 ? '#F59E0B' : '#EF4444',
-                }]} />
+                <View style={[s.progressFill, { width: `${resultados.cobertura}%`, backgroundColor: resultados.cobertura >= 90 ? '#10B981' : resultados.cobertura >= 60 ? '#F59E0B' : '#EF4444' }]} />
               </View>
               <Text style={[d.sub, { fontSize: 12, marginTop: 6 }]}>
                 Producción estimada: <Text style={[d.text, { fontWeight: 'bold' }]}>{Math.round(resultados.produccionMensual)} kWh/mes</Text>
-                {'  ·  '}Consumo: <Text style={[d.text, { fontWeight: 'bold' }]}>{consumoMensual} kWh/mes
-                </Text>
+                {'  ·  '}Consumo: <Text style={[d.text, { fontWeight: 'bold' }]}>{consumoMensual} kWh/mes</Text>
               </Text>
             </View>
 
-            {/* ROI bar */}
             <View style={[s.roiWrap, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <Text style={[d.text, { fontWeight: 'bold', fontSize: 14 }]}>Retorno de inversión</Text>
@@ -365,9 +327,9 @@ export default function Index() {
                 </View>
               </View>
               {[
-                { label: 'Inversión inicial', val: `$${resultados.costoEstimado.toLocaleString()}`, color: '#EF4444' },
-                { label: 'Ahorro anual',      val: `$${Math.round(resultados.ahorroAnual).toLocaleString()}`, color: '#10B981' },
-                { label: 'Ganancia 25 años',  val: `$${Math.round(resultados.ganancia25 / 1000)}k`,          color: '#8B5CF6' },
+                { label: 'Inversión inicial', val: `$${resultados.costoEstimado.toLocaleString()}`,            color: '#EF4444' },
+                { label: 'Ahorro anual',      val: `$${Math.round(resultados.ahorroAnual).toLocaleString()}`,  color: '#10B981' },
+                { label: 'Ganancia 25 años',  val: `$${Math.round(resultados.ganancia25 / 1000)}k`,            color: '#8B5CF6' },
               ].map((row, i) => (
                 <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                   <Text style={[d.sub, { fontSize: 13 }]}>{row.label}</Text>
@@ -381,19 +343,10 @@ export default function Index() {
                   <Text style={[d.sub, { fontSize: 11 }]}>25 años</Text>
                 </View>
                 <View style={s.progressBg}>
-                  <View style={[s.progressFill, {
-                    width: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`,
-                    backgroundColor: '#EF4444',
-                    borderRadius: 0,
-                  }]} />
+                  <View style={[s.progressFill, { width: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`, backgroundColor: '#EF4444', borderRadius: 0 }]} />
                 </View>
                 <View style={s.progressBg}>
-                  <View style={[s.progressFill, {
-                    marginLeft: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`,
-                    width: `${Math.max(0, 100 - (resultados.roiMeses / (25 * 12)) * 100)}%`,
-                    backgroundColor: '#10B981',
-                    borderRadius: 0,
-                  }]} />
+                  <View style={[s.progressFill, { marginLeft: `${Math.min(100, (resultados.roiMeses / (25 * 12)) * 100)}%`, width: `${Math.max(0, 100 - (resultados.roiMeses / (25 * 12)) * 100)}%`, backgroundColor: '#10B981', borderRadius: 0 }]} />
                 </View>
               </View>
               <View style={{ flexDirection: 'row', marginTop: 6, gap: 14 }}>
@@ -413,7 +366,6 @@ export default function Index() {
               {'  ·  '}HSP: <Text style={{ fontWeight: 'bold', color: d.text.color }}>{HSP_DEFAULT} h</Text>
             </Text>
 
-            {/* Botones CTA */}
             <View style={s.ctaRow}>
               <TouchableOpacity style={[s.ctaBtn, { backgroundColor: '#10B981' }]} onPress={irACotizar}>
                 <Ionicons name="document-text-outline" size={18} color="#FFF" />
@@ -442,17 +394,21 @@ export default function Index() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      {/* ✅ Loading overlay OCR */}
+      <LoadingOverlay
+        visible={loading}
+        mensaje={loadingMsg}
+        icono="document-text"
+        submensaje="Esto puede tomar unos segundos..."
+      />
     </SafeAreaView>
   );
 }
 
-// ── KPI Card ───────────────────────────────────────────────────────────────────
 function KPICard({ icon, color, label, value, sub, isDark }: any) {
   return (
-    <View style={[kpi.card, {
-      backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
-      borderColor: isDark ? '#334155' : '#E2E8F0',
-    }]}>
+    <View style={[kpi.card, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: isDark ? '#334155' : '#E2E8F0' }]}>
       <View style={[kpi.iconWrap, { backgroundColor: color + '22' }]}>
         <Ionicons name={icon} size={18} color={color} />
       </View>
