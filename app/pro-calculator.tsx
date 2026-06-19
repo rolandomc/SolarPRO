@@ -51,9 +51,8 @@ export default function ProCalculator() {
   const [inversoresCompatibles, setInversoresCompatibles] = useState<any[]>([]);
   const [resultados, setResultados] = useState<any>(null);
 
-  // ✅ Estados para loading overlay
-  const [loading, setLoading]       = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('');
+  const [loading, setLoading]             = useState(false);
+  const [loadingMsg, setLoadingMsg]       = useState('');
   const [loadingSubMsg, setLoadingSubMsg] = useState('');
 
   useEffect(() => {
@@ -70,7 +69,6 @@ export default function ProCalculator() {
     { tarifa: 'HM / MT',     fases: 3, descripcion: 'Media tensión industrial (HM/MT) — 380V 3F', voltajeAC: 380 },
   ];
 
-  // ✅ OCR con loading overlay
   const escanearPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'], copyToCacheDirectory: true });
@@ -103,7 +101,6 @@ export default function ProCalculator() {
     } catch { Alert.alert('Error', 'Fallo al leer PDF.'); }
   };
 
-  // ✅ HSP NASA con loading overlay
   const obtenerHSP = async () => {
     setLoadingMsg('Consultando NASA POWER...');
     setLoadingSubMsg('Obteniendo radiación solar por GPS...');
@@ -232,7 +229,18 @@ export default function ProCalculator() {
     <SafeAreaView style={[{ flex:1 }, d.bg]} edges={['top','left','right']}>
       <ScrollView style={d.bg}>
         <View style={s.container}>
-          <Text style={[s.title, d.text]}>Dimensionamiento Profesional</Text>
+
+          {/* Header con botón Recibo CFE */}
+          <View style={s.proHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.title, d.text, { marginBottom: 2 }]}>Dimensionamiento Profesional</Text>
+              <Text style={[{ fontSize: 12 }, d.sub]}>NOM-001-SEDE-2012 · NMX-J-680-ANCE-2014</Text>
+            </View>
+            <TouchableOpacity style={s.scanBtn} onPress={escanearPDF}>
+              <Ionicons name="document-attach" size={18} color="#FFF" />
+              <Text style={s.scanTxt}>Recibo CFE</Text>
+            </TouchableOpacity>
+          </View>
 
           {(params.consumoParam || params.clienteParam) && (
             <View style={[s.precargadoBanner, { backgroundColor: isDark ? 'rgba(14,165,233,0.1)' : 'rgba(14,165,233,0.06)', borderColor: '#0EA5E9' }]}>
@@ -243,14 +251,11 @@ export default function ProCalculator() {
             </View>
           )}
 
-          <View style={s.row2}>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#8B5CF6' }]} onPress={escanearPDF}>
-              <Ionicons name="document-text" size={20} color="#FFF" />
-              <Text style={s.btnTxt}>Recibo PDF</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#F59E0B' }]} onPress={obtenerHSP}>
+          {/* Solo botón HSP NASA en la fila de acciones */}
+          <View style={{ marginBottom: 16 }}>
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor:'#F59E0B', width: '100%' }]} onPress={obtenerHSP}>
               <Ionicons name="radio-outline" size={20} color="#FFF" />
-              <Text style={s.btnTxt}>HSP NASA</Text>
+              <Text style={s.btnTxt}>Obtener HSP desde NASA (GPS)</Text>
             </TouchableOpacity>
           </View>
 
@@ -588,7 +593,6 @@ export default function ProCalculator() {
         </View>
       </Modal>
 
-      {/* ✅ Loading overlay — OCR PDF y HSP NASA */}
       <LoadingOverlay
         visible={loading}
         mensaje={loadingMsg}
@@ -645,12 +649,15 @@ const MiniStat = ({ label, val, color }: any) => (
 
 const s = StyleSheet.create({
   container:       { padding:20, paddingBottom:50 },
+  proHeader:       { flexDirection:'row', alignItems:'center', marginBottom:14 },
+  scanBtn:         { flexDirection:'row', alignItems:'center', backgroundColor:'#8B5CF6', paddingHorizontal:12, paddingVertical:9, borderRadius:10, gap:6 },
+  scanTxt:         { color:'#FFF', fontWeight:'bold', fontSize:13 },
   title:           { fontSize:20, fontWeight:'bold', marginBottom:12 },
   normaNote:       { fontSize:11, marginBottom:14, fontStyle:'italic' },
   secLabel:        { fontSize:15, fontWeight:'bold', marginBottom:8 },
   label:           { fontSize:14, fontWeight:'bold', marginBottom:5 },
   row2:            { flexDirection:'row', justifyContent:'space-between', marginBottom:16 },
-  actionBtn:       { width:'48%', flexDirection:'row', padding:12, borderRadius:8, justifyContent:'center', alignItems:'center' },
+  actionBtn:       { flexDirection:'row', padding:12, borderRadius:8, justifyContent:'center', alignItems:'center' },
   btnTxt:          { color:'#FFF', fontWeight:'bold', marginLeft:8 },
   card:            { padding:20, borderRadius:12, borderWidth:1 },
   input:           { borderWidth:1, borderRadius:8, padding:12, fontSize:16 },

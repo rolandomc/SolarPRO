@@ -180,27 +180,21 @@ export default function Index() {
     <SafeAreaView style={[s.safe, d.bg]} edges={['top','left','right']}>
       <ScrollView contentContainerStyle={[s.scroll, d.bg]}>
 
-        {/* Header */}
+        {/* Header — solo botón Nuevo si hay datos */}
         <View style={s.header}>
           <View>
             <Text style={[s.headerTitle, d.text]}>Calculadora Solar</Text>
             <Text style={[s.headerSub, d.sub]}>Estimación rápida</Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {(resultados || cliente || consumoMensual) && (
-              <TouchableOpacity
-                style={[s.clearBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
-                onPress={limpiarTodo}
-              >
-                <Ionicons name="refresh" size={16} color={isDark ? '#94A3B8' : '#64748B'} />
-                <Text style={[s.clearTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nuevo</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={s.scanBtn} onPress={escanearRecibo}>
-              <Ionicons name="document-attach" size={20} color="#FFF" />
-              <Text style={s.scanTxt}>Recibo CFE</Text>
+          {(resultados || cliente || consumoMensual) && (
+            <TouchableOpacity
+              style={[s.clearBtn, { borderColor: isDark ? '#475569' : '#CBD5E1' }]}
+              onPress={limpiarTodo}
+            >
+              <Ionicons name="refresh" size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+              <Text style={[s.clearTxt, { color: isDark ? '#94A3B8' : '#64748B' }]}>Nuevo</Text>
             </TouchableOpacity>
-          </View>
+          )}
         </View>
 
         {/* Tarjeta OCR */}
@@ -299,12 +293,18 @@ export default function Index() {
             ))}
           </View>
           <TextInput
-            style={[s.input, d.input, { marginTop: 8, marginBottom: 6 }]}
+            style={[s.input, d.input, { marginTop: 8, marginBottom: 14 }]}
             keyboardType="numeric"
             placeholder="O escribe el % exacto (1-100)"
             placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
             value={porcentajeAhorro} onChangeText={setPorcentajeAhorro}
           />
+
+          {/* Botón Recibo CFE — único, dentro del formulario */}
+          <TouchableOpacity style={s.scanBtn} onPress={escanearRecibo}>
+            <Ionicons name="document-attach" size={20} color="#FFF" />
+            <Text style={s.scanTxt}>Escanear Recibo CFE</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity style={s.calcBtn} onPress={calcularSistema}>
             <Ionicons name="flash" size={20} color="#FFF" />
@@ -462,8 +462,8 @@ const s = StyleSheet.create({
   headerSub:     { fontSize: 13, marginTop: 2 },
   clearBtn:      { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
   clearTxt:      { fontSize: 12, fontWeight: '600' },
-  scanBtn:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
-  scanTxt:       { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 13 },
+  scanBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 10, gap: 8 },
+  scanTxt:       { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   card:          { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 12 },
   sectionTitle:  { fontSize: 17, fontWeight: 'bold', marginBottom: 14 },
   label:         { fontSize: 13, fontWeight: '600', marginBottom: 6 },
@@ -471,7 +471,7 @@ const s = StyleSheet.create({
   presetRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   presetChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5 },
   presetTxt:     { fontSize: 13, fontWeight: 'bold' },
-  calcBtn:       { backgroundColor: '#0EA5E9', padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 14, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  calcBtn:       { backgroundColor: '#0EA5E9', padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 4, flexDirection: 'row', justifyContent: 'center', gap: 8 },
   calcBtnTxt:    { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   kpiGrid:       { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   coberturaWrap: { borderWidth: 1, borderRadius: 10, padding: 14, marginBottom: 12 },
