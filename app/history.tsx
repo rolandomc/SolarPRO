@@ -113,7 +113,6 @@ export default function History() {
     .filter(c => c.estado === 'aprobado' || c.estado === 'instalado')
     .reduce((s, c) => s + c.total, 0);
 
-  // Lee potenciaKWp directo del objeto roi (guardado desde pro-calculator)
   const kwInstalados = lista
     .filter(c => c.estado === 'instalado' && c.roi?.potenciaKWp)
     .reduce((s, c) => s + (c.roi.potenciaKWp as number), 0);
@@ -135,23 +134,26 @@ export default function History() {
         onPress={() => { setModalCot(item); setNotaTemp(item.notas || ''); }}
         activeOpacity={0.75}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={[d.text, { fontWeight: 'bold', fontSize: 16 }]}>{item.cliente}</Text>
+        {/* Columna izquierda — se encoge si el nombre es largo */}
+        <View style={{ flex: 1, marginRight: 10 }}>
+          <Text style={[d.text, { fontWeight: 'bold', fontSize: 16 }]} numberOfLines={1}>{item.cliente}</Text>
           <Text style={[d.sub, { fontSize: 12, marginTop: 2 }]}>{item.fecha}</Text>
           {item.roi && (
-            <Text style={[d.sub, { fontSize: 12 }]}>
+            <Text style={[d.sub, { fontSize: 12 }]} numberOfLines={1}>
               {item.roi.potenciaKWp ? `${item.roi.potenciaKWp.toFixed(2)} kWp  •  ` : ''}
-              ROI: {item.roi.roiMeses} meses  •  Ahorro: ${item.roi.ahorroAnual?.toLocaleString()}/año
+              ROI: {item.roi.roiMeses} meses
             </Text>
           )}
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#10B981' }}>
+
+        {/* Columna derecha — ancho fijo para que nunca se aplaste */}
+        <View style={h.itemRight}>
+          <Text style={h.itemTotal} numberOfLines={1}>
             ${item.total.toLocaleString()}
           </Text>
           <View style={[h.estadoBadge, { backgroundColor: est.color + '22' }]}>
             <Ionicons name={est.icon as any} size={12} color={est.color} />
-            <Text style={{ fontSize: 11, color: est.color, marginLeft: 4, fontWeight: 'bold' }}>
+            <Text style={[h.estadoBadgeTxt, { color: est.color }]}>
               {est.label}
             </Text>
           </View>
@@ -360,28 +362,32 @@ const RoiMini = ({ label, valor, color }: any) => (
 );
 
 const h = StyleSheet.create({
-  header:        { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  title:         { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
-  statsRow:      { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
-  statCard:      { flex: 1, alignItems: 'center', borderRadius: 10, borderWidth: 1, padding: 12, marginHorizontal: 4 },
-  searchBox:     { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 },
-  filtrosScroll: { maxHeight: 52 },
-  filtroBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#334155', marginRight: 8 },
-  empty:         { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  itemCard:      { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
-  estadoBadge:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
-  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  modalBox:      { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '92%' },
-  modalHeader:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  totalBox:      { borderWidth: 1.5, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
-  estadosGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  estadoBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  itemDetalle:   { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 8 },
-  roiResumen:    { borderWidth: 1.5, borderRadius: 10, padding: 14, marginTop: 16 },
-  notasInput:    { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 10 },
-  guardarNotaBtn:{ backgroundColor: '#334155', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
-  accionesRow:   { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  accionBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10 },
-  accionTxt:     { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 14 },
-  eliminarBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#EF4444', marginBottom: 8 },
+  header:          { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  title:           { fontSize: 22, fontWeight: 'bold', marginBottom: 2 },
+  statsRow:        { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8 },
+  statCard:        { flex: 1, alignItems: 'center', borderRadius: 10, borderWidth: 1, padding: 12, marginHorizontal: 4 },
+  searchBox:       { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 },
+  filtrosScroll:   { maxHeight: 52 },
+  filtroBadge:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#334155', marginRight: 8 },
+  empty:           { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  itemCard:        { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  // Columna derecha con ancho mínimo fijo — evita que el badge se aplaste
+  itemRight:       { alignItems: 'flex-end', minWidth: 100, flexShrink: 0 },
+  itemTotal:       { fontWeight: 'bold', fontSize: 16, color: '#10B981' },
+  estadoBadge:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginTop: 6 },
+  estadoBadgeTxt:  { fontSize: 11, marginLeft: 4, fontWeight: 'bold' },
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  modalBox:        { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '92%' },
+  modalHeader:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  totalBox:        { borderWidth: 1.5, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
+  estadosGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  estadoBtn:       { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  itemDetalle:     { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 8 },
+  roiResumen:      { borderWidth: 1.5, borderRadius: 10, padding: 14, marginTop: 16 },
+  notasInput:      { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 10 },
+  guardarNotaBtn:  { backgroundColor: '#334155', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
+  accionesRow:     { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  accionBtn:       { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10 },
+  accionTxt:       { color: '#FFF', fontWeight: 'bold', marginLeft: 8, fontSize: 14 },
+  eliminarBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#EF4444', marginBottom: 8 },
 });
